@@ -1,0 +1,38 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    restart: always
+    container_name: zindex-postgres
+    environment:
+      POSTGRES_USER: zindex
+      POSTGRES_PASSWORD: changeme
+      POSTGRES_DB: zindex
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U zindex"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  zindex:
+    build: .
+    restart: always
+    container_name: zindex
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./configs:/root/configs
+    environment:
+      - CONFIG_PATH=/root/configs/config.yaml
+    command: ["./zindex", "--config", "/root/configs/config.yaml"]
+
+volumes:
+  postgres_data:

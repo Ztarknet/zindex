@@ -1,0 +1,10 @@
+.git
+.gitignore
+.claude
+README.md
+*.md
+deploy/
+scripts/
+.env
+.env.*
+*.log
