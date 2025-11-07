@@ -1,9 +1,10 @@
 package accounts
 
 import (
-	"database/sql"
+	"context"
 	"fmt"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/keep-starknet-strange/ztarknet/zindex/internal/db/postgres"
 )
 
@@ -22,7 +23,7 @@ func InitSchema() error {
 		CREATE INDEX IF NOT EXISTS idx_accounts_balance ON accounts(balance);
 	`
 
-	_, err := postgres.DB.Exec(schema)
+	_, err := postgres.DB.Exec(context.Background(), schema)
 	if err != nil {
 		return fmt.Errorf("failed to create accounts schema: %w", err)
 	}
@@ -31,41 +32,30 @@ func InitSchema() error {
 }
 
 func GetAccount(address string) (*Account, error) {
-	var account Account
-	err := postgres.DB.QueryRow(
+	account, err := postgres.PostgresQueryOne[Account](
 		`SELECT address, type, balance, tx_count, first_seen_at, last_activity_at
 		 FROM accounts WHERE address = $1`,
 		address,
-	).Scan(&account.Address, &account.Type, &account.Balance, &account.TxCount, &account.FirstSeenAt, &account.LastActivityAt)
+	)
 
-	if err == sql.ErrNoRows {
+	if err == pgx.ErrNoRows {
 		return nil, nil
 	}
 	if err != nil {
 		return nil, fmt.Errorf("failed to get account: %w", err)
 	}
 
-	return &account, nil
+	return account, nil
 }
 
 func GetAccounts(limit, offset int) ([]Account, error) {
-	rows, err := postgres.DB.Query(
+	accounts, err := postgres.PostgresQuery[Account](
 		`SELECT address, type, balance, tx_count, first_seen_at, last_activity_at
 		 FROM accounts ORDER BY last_activity_at DESC LIMIT $1 OFFSET $2`,
 		limit, offset,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query accounts: %w", err)
-	}
-	defer rows.Close()
-
-	var accounts []Account
-	for rows.Next() {
-		var account Account
-		if err := rows.Scan(&account.Address, &account.Type, &account.Balance, &account.TxCount, &account.FirstSeenAt, &account.LastActivityAt); err != nil {
-			return nil, fmt.Errorf("failed to scan account: %w", err)
-		}
-		accounts = append(accounts, account)
 	}
 
 	return accounts, nil

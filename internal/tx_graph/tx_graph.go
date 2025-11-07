@@ -1,6 +1,7 @@
 package tx_graph
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/keep-starknet-strange/ztarknet/zindex/internal/db/postgres"
@@ -22,7 +23,7 @@ func InitSchema() error {
 		CREATE INDEX IF NOT EXISTS idx_tx_edges_to ON tx_edges(to_txid);
 	`
 
-	_, err := postgres.DB.Exec(schema)
+	_, err := postgres.DB.Exec(context.Background(), schema)
 	if err != nil {
 		return fmt.Errorf("failed to create tx_graph schema: %w", err)
 	}
@@ -31,18 +32,17 @@ func InitSchema() error {
 }
 
 func GetTransaction(txid string) (*Transaction, error) {
-	var tx Transaction
-	err := postgres.DB.QueryRow(
+	tx, err := postgres.PostgresQueryOne[Transaction](
 		`SELECT txid, block_height, version, locktime, expiry_height, size, created_at
 		 FROM transactions WHERE txid = $1`,
 		txid,
-	).Scan(&tx.TxID, &tx.BlockHeight, &tx.Version, &tx.Locktime, &tx.ExpiryHeight, &tx.Size, &tx.CreatedAt)
+	)
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to get transaction: %w", err)
 	}
 
-	return &tx, nil
+	return tx, nil
 }
 
 func GetTransactionGraph(txid string, depth int) ([]TransactionEdge, error) {
@@ -62,19 +62,9 @@ func GetTransactionGraph(txid string, depth int) ([]TransactionEdge, error) {
 		SELECT from_txid, to_txid, vout, vin, value FROM tx_graph
 	`
 
-	rows, err := postgres.DB.Query(query, txid, depth)
+	edges, err := postgres.PostgresQuery[TransactionEdge](query, txid, depth)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query transaction graph: %w", err)
-	}
-	defer rows.Close()
-
-	var edges []TransactionEdge
-	for rows.Next() {
-		var edge TransactionEdge
-		if err := rows.Scan(&edge.FromTxID, &edge.ToTxID, &edge.Vout, &edge.Vin, &edge.Value); err != nil {
-			return nil, fmt.Errorf("failed to scan edge: %w", err)
-		}
-		edges = append(edges, edge)
 	}
 
 	return edges, nil

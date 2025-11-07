@@ -1,9 +1,10 @@
 package tze_graph
 
 import (
-	"database/sql"
+	"context"
 	"fmt"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/keep-starknet-strange/ztarknet/zindex/internal/db/postgres"
 )
 
@@ -32,7 +33,7 @@ func InitSchema() error {
 		CREATE INDEX IF NOT EXISTS idx_tze_witnesses_txid ON tze_witnesses(txid);
 	`
 
-	_, err := postgres.DB.Exec(schema)
+	_, err := postgres.DB.Exec(context.Background(), schema)
 	if err != nil {
 		return fmt.Errorf("failed to create tze_graph schema: %w", err)
 	}
@@ -41,25 +42,24 @@ func InitSchema() error {
 }
 
 func GetTZETransaction(txid string) (*TZETransaction, error) {
-	var tx TZETransaction
-	err := postgres.DB.QueryRow(
+	tx, err := postgres.PostgresQueryOne[TZETransaction](
 		`SELECT txid, block_height, tze_type, payload, witness_data, created_at
 		 FROM tze_transactions WHERE txid = $1`,
 		txid,
-	).Scan(&tx.TxID, &tx.BlockHeight, &tx.TZEType, &tx.Payload, &tx.WitnessData, &tx.CreatedAt)
+	)
 
-	if err == sql.ErrNoRows {
+	if err == pgx.ErrNoRows {
 		return nil, nil
 	}
 	if err != nil {
 		return nil, fmt.Errorf("failed to get TZE transaction: %w", err)
 	}
 
-	return &tx, nil
+	return tx, nil
 }
 
 func GetTZETransactionsByType(tzeType string, limit, offset int) ([]TZETransaction, error) {
-	rows, err := postgres.DB.Query(
+	txs, err := postgres.PostgresQuery[TZETransaction](
 		`SELECT txid, block_height, tze_type, payload, witness_data, created_at
 		 FROM tze_transactions WHERE tze_type = $1
 		 ORDER BY block_height DESC LIMIT $2 OFFSET $3`,
@@ -68,38 +68,18 @@ func GetTZETransactionsByType(tzeType string, limit, offset int) ([]TZETransacti
 	if err != nil {
 		return nil, fmt.Errorf("failed to query TZE transactions: %w", err)
 	}
-	defer rows.Close()
-
-	var txs []TZETransaction
-	for rows.Next() {
-		var tx TZETransaction
-		if err := rows.Scan(&tx.TxID, &tx.BlockHeight, &tx.TZEType, &tx.Payload, &tx.WitnessData, &tx.CreatedAt); err != nil {
-			return nil, fmt.Errorf("failed to scan TZE transaction: %w", err)
-		}
-		txs = append(txs, tx)
-	}
 
 	return txs, nil
 }
 
 func GetTZEWitnesses(txid string) ([]TZEWitness, error) {
-	rows, err := postgres.DB.Query(
+	witnesses, err := postgres.PostgresQuery[TZEWitness](
 		`SELECT id, txid, witness_type, data, created_at
 		 FROM tze_witnesses WHERE txid = $1`,
 		txid,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query TZE witnesses: %w", err)
-	}
-	defer rows.Close()
-
-	var witnesses []TZEWitness
-	for rows.Next() {
-		var witness TZEWitness
-		if err := rows.Scan(&witness.ID, &witness.TxID, &witness.WitnessType, &witness.Data, &witness.CreatedAt); err != nil {
-			return nil, fmt.Errorf("failed to scan TZE witness: %w", err)
-		}
-		witnesses = append(witnesses, witness)
 	}
 
 	return witnesses, nil

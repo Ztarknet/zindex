@@ -1,9 +1,10 @@
 package starks
 
 import (
-	"database/sql"
+	"context"
 	"fmt"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/keep-starknet-strange/ztarknet/zindex/internal/db/postgres"
 )
 
@@ -26,7 +27,7 @@ func InitSchema() error {
 		CREATE INDEX IF NOT EXISTS idx_stark_proofs_verified ON stark_proofs(verified);
 	`
 
-	_, err := postgres.DB.Exec(schema)
+	_, err := postgres.DB.Exec(context.Background(), schema)
 	if err != nil {
 		return fmt.Errorf("failed to create starks schema: %w", err)
 	}
@@ -35,26 +36,24 @@ func InitSchema() error {
 }
 
 func GetProof(id int64) (*StarkProof, error) {
-	var proof StarkProof
-	err := postgres.DB.QueryRow(
+	proof, err := postgres.PostgresQueryOne[StarkProof](
 		`SELECT id, txid, block_height, proof_data, verification_key, public_inputs, verified, verification_time, created_at
 		 FROM stark_proofs WHERE id = $1`,
 		id,
-	).Scan(&proof.ID, &proof.TxID, &proof.BlockHeight, &proof.ProofData, &proof.VerificationKey,
-		&proof.PublicInputs, &proof.Verified, &proof.VerificationTime, &proof.CreatedAt)
+	)
 
-	if err == sql.ErrNoRows {
+	if err == pgx.ErrNoRows {
 		return nil, nil
 	}
 	if err != nil {
 		return nil, fmt.Errorf("failed to get proof: %w", err)
 	}
 
-	return &proof, nil
+	return proof, nil
 }
 
 func GetProofsByTransaction(txid string) ([]StarkProof, error) {
-	rows, err := postgres.DB.Query(
+	proofs, err := postgres.PostgresQuery[StarkProof](
 		`SELECT id, txid, block_height, proof_data, verification_key, public_inputs, verified, verification_time, created_at
 		 FROM stark_proofs WHERE txid = $1`,
 		txid,
@@ -62,31 +61,18 @@ func GetProofsByTransaction(txid string) ([]StarkProof, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to query proofs: %w", err)
 	}
-	defer rows.Close()
-
-	var proofs []StarkProof
-	for rows.Next() {
-		var proof StarkProof
-		if err := rows.Scan(&proof.ID, &proof.TxID, &proof.BlockHeight, &proof.ProofData,
-			&proof.VerificationKey, &proof.PublicInputs, &proof.Verified,
-			&proof.VerificationTime, &proof.CreatedAt); err != nil {
-			return nil, fmt.Errorf("failed to scan proof: %w", err)
-		}
-		proofs = append(proofs, proof)
-	}
 
 	return proofs, nil
 }
 
 func GetProofStats() (*ProofStats, error) {
-	var stats ProofStats
-	err := postgres.DB.QueryRow(
+	stats, err := postgres.PostgresQueryOne[ProofStats](
 		`SELECT
 			COUNT(*) as total,
 			COUNT(*) FILTER (WHERE verified = TRUE) as verified,
 			COUNT(*) FILTER (WHERE verified = FALSE) as unverified
 		 FROM stark_proofs`,
-	).Scan(&stats.TotalProofs, &stats.VerifiedProofs, &stats.UnverifiedProofs)
+	)
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to get proof stats: %w", err)
@@ -96,11 +82,11 @@ func GetProofStats() (*ProofStats, error) {
 		stats.VerificationRate = float64(stats.VerifiedProofs) / float64(stats.TotalProofs)
 	}
 
-	return &stats, nil
+	return stats, nil
 }
 
 func GetUnverifiedProofs(limit int) ([]StarkProof, error) {
-	rows, err := postgres.DB.Query(
+	proofs, err := postgres.PostgresQuery[StarkProof](
 		`SELECT id, txid, block_height, proof_data, verification_key, public_inputs, verified, verification_time, created_at
 		 FROM stark_proofs WHERE verified = FALSE
 		 ORDER BY created_at ASC LIMIT $1`,
@@ -108,18 +94,6 @@ func GetUnverifiedProofs(limit int) ([]StarkProof, error) {
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query unverified proofs: %w", err)
-	}
-	defer rows.Close()
-
-	var proofs []StarkProof
-	for rows.Next() {
-		var proof StarkProof
-		if err := rows.Scan(&proof.ID, &proof.TxID, &proof.BlockHeight, &proof.ProofData,
-			&proof.VerificationKey, &proof.PublicInputs, &proof.Verified,
-			&proof.VerificationTime, &proof.CreatedAt); err != nil {
-			return nil, fmt.Errorf("failed to scan proof: %w", err)
-		}
-		proofs = append(proofs, proof)
 	}
 
 	return proofs, nil
