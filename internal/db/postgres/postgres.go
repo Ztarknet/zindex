@@ -21,9 +21,12 @@ func InitPostgres() error {
 	}
 
 	cfg := config.Conf.Database
+
+	// Build connection string with all connection parameters
 	connStr := fmt.Sprintf(
-		"postgresql://%s:%s@%s:%s/%s?sslmode=%s",
+		"postgresql://%s:%s@%s:%s/%s?sslmode=%s&connect_timeout=%d&statement_timeout=%d",
 		cfg.User, cfg.Password, cfg.Host, cfg.Port, cfg.DBName, cfg.SSLMode,
+		cfg.ConnectTimeout, cfg.StatementTimeout*1000, // statement_timeout is in milliseconds
 	)
 
 	log.Println("Connecting to PostgreSQL...")
@@ -33,16 +36,28 @@ func InitPostgres() error {
 		return fmt.Errorf("failed to parse database config: %w", err)
 	}
 
+	// Configure connection pool settings
 	poolConfig.MaxConns = int32(cfg.MaxConnections)
 	poolConfig.MinConns = int32(cfg.MaxIdleConnections)
 	poolConfig.MaxConnLifetime = time.Duration(cfg.ConnectionLifetime) * time.Second
+	poolConfig.MaxConnIdleTime = time.Duration(cfg.ConnectionLifetime) * time.Second
 
-	pool, err := pgxpool.NewWithConfig(context.Background(), poolConfig)
+	log.Printf("Database pool configured with MaxConns: %d, MinConns: %d, MaxConnLifetime: %ds, ConnectTimeout: %ds, StatementTimeout: %ds",
+		cfg.MaxConnections,
+		cfg.MaxIdleConnections,
+		cfg.ConnectionLifetime,
+		cfg.ConnectTimeout,
+		cfg.StatementTimeout)
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(cfg.ConnectTimeout)*time.Second)
+	defer cancel()
+
+	pool, err := pgxpool.NewWithConfig(ctx, poolConfig)
 	if err != nil {
 		return fmt.Errorf("failed to create connection pool: %w", err)
 	}
 
-	if err := pool.Ping(context.Background()); err != nil {
+	if err := pool.Ping(ctx); err != nil {
 		return fmt.Errorf("failed to ping database: %w", err)
 	}
 

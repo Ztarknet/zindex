@@ -87,7 +87,7 @@ func GetTzeInputsByType(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	limit := utils.ParseQueryParamInt(r, "limit", 50)
+	limit := utils.ParseQueryParamInt(r, "limit", utils.GetDefaultPaginationLimit())
 	offset := utils.ParseQueryParamInt(r, "offset", 0)
 
 
@@ -116,7 +116,7 @@ func GetTzeInputsByMode(w http.ResponseWriter, r *http.Request) {
 
 	tzeMode := tze_graph.TzeMode(modeInt)
 
-	limit := utils.ParseQueryParamInt(r, "limit", 50)
+	limit := utils.ParseQueryParamInt(r, "limit", utils.GetDefaultPaginationLimit())
 	offset := utils.ParseQueryParamInt(r, "offset", 0)
 
 
@@ -162,7 +162,7 @@ func GetTzeInputsByTypeAndMode(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	limit := utils.ParseQueryParamInt(r, "limit", 50)
+	limit := utils.ParseQueryParamInt(r, "limit", utils.GetDefaultPaginationLimit())
 	offset := utils.ParseQueryParamInt(r, "offset", 0)
 
 
@@ -285,7 +285,7 @@ func GetAllUnspentTzeOutputs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	limit := utils.ParseQueryParamInt(r, "limit", 50)
+	limit := utils.ParseQueryParamInt(r, "limit", utils.GetDefaultPaginationLimit())
 	offset := utils.ParseQueryParamInt(r, "offset", 0)
 
 
@@ -312,7 +312,7 @@ func GetTzeOutputsByType(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	limit := utils.ParseQueryParamInt(r, "limit", 50)
+	limit := utils.ParseQueryParamInt(r, "limit", utils.GetDefaultPaginationLimit())
 	offset := utils.ParseQueryParamInt(r, "offset", 0)
 
 
@@ -341,7 +341,7 @@ func GetTzeOutputsByMode(w http.ResponseWriter, r *http.Request) {
 
 	tzeMode := tze_graph.TzeMode(modeInt)
 
-	limit := utils.ParseQueryParamInt(r, "limit", 50)
+	limit := utils.ParseQueryParamInt(r, "limit", utils.GetDefaultPaginationLimit())
 	offset := utils.ParseQueryParamInt(r, "offset", 0)
 
 
@@ -387,7 +387,7 @@ func GetTzeOutputsByTypeAndMode(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	limit := utils.ParseQueryParamInt(r, "limit", 50)
+	limit := utils.ParseQueryParamInt(r, "limit", utils.GetDefaultPaginationLimit())
 	offset := utils.ParseQueryParamInt(r, "offset", 0)
 
 
@@ -414,7 +414,7 @@ func GetUnspentTzeOutputsByType(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	limit := utils.ParseQueryParamInt(r, "limit", 50)
+	limit := utils.ParseQueryParamInt(r, "limit", utils.GetDefaultPaginationLimit())
 	offset := utils.ParseQueryParamInt(r, "offset", 0)
 
 
@@ -460,7 +460,7 @@ func GetUnspentTzeOutputsByTypeAndMode(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	limit := utils.ParseQueryParamInt(r, "limit", 50)
+	limit := utils.ParseQueryParamInt(r, "limit", utils.GetDefaultPaginationLimit())
 	offset := utils.ParseQueryParamInt(r, "offset", 0)
 
 
@@ -474,7 +474,7 @@ func GetSpentTzeOutputs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	limit := utils.ParseQueryParamInt(r, "limit", 50)
+	limit := utils.ParseQueryParamInt(r, "limit", utils.GetDefaultPaginationLimit())
 	offset := utils.ParseQueryParamInt(r, "offset", 0)
 
 
@@ -494,7 +494,7 @@ func GetTzeOutputsByValue(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	limit := utils.ParseQueryParamInt(r, "limit", 50)
+	limit := utils.ParseQueryParamInt(r, "limit", utils.GetDefaultPaginationLimit())
 	offset := utils.ParseQueryParamInt(r, "offset", 0)
 
 

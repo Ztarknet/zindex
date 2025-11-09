@@ -73,7 +73,7 @@ func GetAllVerifiers(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	limit := utils.ParseQueryParamInt(r, "limit", 50)
+	limit := utils.ParseQueryParamInt(r, "limit", utils.GetDefaultPaginationLimit())
 	offset := utils.ParseQueryParamInt(r, "offset", 0)
 	limit, offset = utils.NormalizePagination(limit, offset)
 
@@ -93,7 +93,7 @@ func GetVerifiersByBalance(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	limit := utils.ParseQueryParamInt(r, "limit", 50)
+	limit := utils.ParseQueryParamInt(r, "limit", utils.GetDefaultPaginationLimit())
 	offset := utils.ParseQueryParamInt(r, "offset", 0)
 	limit, offset = utils.NormalizePagination(limit, offset)
 
@@ -156,7 +156,7 @@ func GetStarkProofsByVerifier(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	limit := utils.ParseQueryParamInt(r, "limit", 50)
+	limit := utils.ParseQueryParamInt(r, "limit", utils.GetDefaultPaginationLimit())
 	offset := utils.ParseQueryParamInt(r, "offset", 0)
 	limit, offset = utils.NormalizePagination(limit, offset)
 
@@ -220,7 +220,7 @@ func GetRecentStarkProofs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	limit := utils.ParseQueryParamInt(r, "limit", 50)
+	limit := utils.ParseQueryParamInt(r, "limit", utils.GetDefaultPaginationLimit())
 	offset := utils.ParseQueryParamInt(r, "offset", 0)
 	limit, offset = utils.NormalizePagination(limit, offset)
 
@@ -257,7 +257,7 @@ func GetStarkProofsBySize(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	limit := utils.ParseQueryParamInt(r, "limit", 50)
+	limit := utils.ParseQueryParamInt(r, "limit", utils.GetDefaultPaginationLimit())
 	offset := utils.ParseQueryParamInt(r, "offset", 0)
 	limit, offset = utils.NormalizePagination(limit, offset)
 
@@ -320,7 +320,7 @@ func GetZtarknetFactsByVerifier(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	limit := utils.ParseQueryParamInt(r, "limit", 50)
+	limit := utils.ParseQueryParamInt(r, "limit", utils.GetDefaultPaginationLimit())
 	offset := utils.ParseQueryParamInt(r, "offset", 0)
 	limit, offset = utils.NormalizePagination(limit, offset)
 
@@ -450,7 +450,7 @@ func GetRecentZtarknetFacts(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	limit := utils.ParseQueryParamInt(r, "limit", 50)
+	limit := utils.ParseQueryParamInt(r, "limit", utils.GetDefaultPaginationLimit())
 	offset := utils.ParseQueryParamInt(r, "offset", 0)
 	limit, offset = utils.NormalizePagination(limit, offset)
 

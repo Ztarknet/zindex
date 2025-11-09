@@ -1,16 +1,17 @@
 # Zcash RPC Configuration
 rpc:
-  url: "http://localhost:8232"
-  username: "zcashrpc"
-  password: "changeme"
+  url: "https://rpc.regtest.ztarknet.cash"
   timeout: 30
+  retry_attempts: 3
+  retry_delay: 5
 
 # API Server Configuration
 api:
-  host: "localhost"
+  host: "0.0.0.0"
   port: "8080"
   production: false
   admin: true
+
   cors:
     allowed_origins:
       - "*"
@@ -24,23 +25,37 @@ api:
       - "Content-Type"
       - "Authorization"
 
+  read_timeout: 30
+  write_timeout: 30
+  idle_timeout: 120
+  max_header_bytes: 1048576
+
+  pagination:
+    default_limit: 50
+    max_limit: 100
+    max_offset: 10000
+
 # PostgreSQL Database Configuration
 database:
   host: "localhost"
   port: "5432"
   user: "zindex"
-  password: "changeme"
+  password: "${DB_PASSWORD}"
   dbname: "zindex"
   sslmode: "disable"
+
   max_connections: 25
   max_idle_connections: 5
   connection_lifetime: 300
+  connect_timeout: 10
+  statement_timeout: 30
 
 # Indexer Configuration
 indexer:
   batch_size: 10
   poll_interval: 5
   start_block: 0
+
   enable_reorg_handling: true
   max_reorg_depth: 5
 
@@ -49,23 +64,18 @@ modules:
   # Transaction Graph - Tracks all transactions and their relationships
   tx_graph:
     enabled: true
-    track_pool: true
-    track_joinsplits: true
+    max_graph_depth: 10
 
   # TZE (Trusted Extension) Graph - Tracks TZE transactions
   tze_graph:
     enabled: true
-    track_witnesses: true
+    max_precondition_size: 1048576
 
   # STARKS - Zero-knowledge proof verification and tracking
   starks:
     enabled: true
-    verify_proofs: false
-    track_verification_keys: true
+    index_ztarknet: true
 
   # Accounts - Track shielded and transparent addresses
   accounts:
     enabled: true
-    track_transparent: true
-    track_shielded: true
-    track_balances: true

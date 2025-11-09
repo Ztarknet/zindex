@@ -42,7 +42,7 @@ func GetAccounts(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	limit := utils.ParseQueryParamInt(r, "limit", 50)
+	limit := utils.ParseQueryParamInt(r, "limit", utils.GetDefaultPaginationLimit())
 	offset := utils.ParseQueryParamInt(r, "offset", 0)
 	limit, offset = utils.NormalizePagination(limit, offset)
 
@@ -79,7 +79,7 @@ func GetAccountsByBalanceRange(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	limit := utils.ParseQueryParamInt(r, "limit", 50)
+	limit := utils.ParseQueryParamInt(r, "limit", utils.GetDefaultPaginationLimit())
 	offset := utils.ParseQueryParamInt(r, "offset", 0)
 	limit, offset = utils.NormalizePagination(limit, offset)
 
@@ -99,7 +99,7 @@ func GetTopAccountsByBalance(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	limit := utils.ParseQueryParamInt(r, "limit", 50)
+	limit := utils.ParseQueryParamInt(r, "limit", utils.GetDefaultPaginationLimit())
 	limit, _ = utils.NormalizePagination(limit, 0)
 
 	accountList, err := accounts.GetTopAccountsByBalance(limit)
@@ -124,7 +124,7 @@ func GetAccountTransactions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	limit := utils.ParseQueryParamInt(r, "limit", 50)
+	limit := utils.ParseQueryParamInt(r, "limit", utils.GetDefaultPaginationLimit())
 	offset := utils.ParseQueryParamInt(r, "offset", 0)
 	limit, offset = utils.NormalizePagination(limit, offset)
 
@@ -166,7 +166,7 @@ func GetAccountTransactionsByType(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	limit := utils.ParseQueryParamInt(r, "limit", 50)
+	limit := utils.ParseQueryParamInt(r, "limit", utils.GetDefaultPaginationLimit())
 	offset := utils.ParseQueryParamInt(r, "offset", 0)
 	limit, offset = utils.NormalizePagination(limit, offset)
 
@@ -192,7 +192,7 @@ func GetAccountIncomingTransactions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	limit := utils.ParseQueryParamInt(r, "limit", 50)
+	limit := utils.ParseQueryParamInt(r, "limit", utils.GetDefaultPaginationLimit())
 	offset := utils.ParseQueryParamInt(r, "offset", 0)
 	limit, offset = utils.NormalizePagination(limit, offset)
 
@@ -218,7 +218,7 @@ func GetAccountOutgoingTransactions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	limit := utils.ParseQueryParamInt(r, "limit", 50)
+	limit := utils.ParseQueryParamInt(r, "limit", utils.GetDefaultPaginationLimit())
 	offset := utils.ParseQueryParamInt(r, "offset", 0)
 	limit, offset = utils.NormalizePagination(limit, offset)
 
@@ -261,7 +261,7 @@ func GetAccountTransactionsByBlockRange(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	limit := utils.ParseQueryParamInt(r, "limit", 50)
+	limit := utils.ParseQueryParamInt(r, "limit", utils.GetDefaultPaginationLimit())
 	offset := utils.ParseQueryParamInt(r, "offset", 0)
 	limit, offset = utils.NormalizePagination(limit, offset)
 
@@ -358,7 +358,7 @@ func GetRecentActiveAccounts(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	limit := utils.ParseQueryParamInt(r, "limit", 50)
+	limit := utils.ParseQueryParamInt(r, "limit", utils.GetDefaultPaginationLimit())
 	limit, _ = utils.NormalizePagination(limit, 0)
 
 	accountList, err := accounts.GetRecentActiveAccounts(limit)

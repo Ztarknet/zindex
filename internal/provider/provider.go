@@ -159,37 +159,55 @@ func makeRPCCall(method string, params []interface{}) (json.RawMessage, error) {
 		return nil, fmt.Errorf("failed to marshal request: %w", err)
 	}
 
-	req, err := http.NewRequest("POST", config.Conf.Rpc.Url, bytes.NewBuffer(jsonData))
-	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
+	var lastErr error
+	maxAttempts := config.Conf.Rpc.RetryAttempts
+	if maxAttempts < 1 {
+		maxAttempts = 1
 	}
 
-	req.Header.Set("Content-Type", "application/json")
-	if config.Conf.Rpc.Username != "" {
-		req.SetBasicAuth(config.Conf.Rpc.Username, config.Conf.Rpc.Password)
+	for attempt := 0; attempt < maxAttempts; attempt++ {
+		if attempt > 0 {
+			retryDelay := time.Duration(config.Conf.Rpc.RetryDelay) * time.Second
+			log.Printf("Retrying RPC call to %s (attempt %d/%d) after %v", method, attempt+1, maxAttempts, retryDelay)
+			time.Sleep(retryDelay)
+		}
+
+		req, err := http.NewRequest("POST", config.Conf.Rpc.Url, bytes.NewBuffer(jsonData))
+		if err != nil {
+			lastErr = fmt.Errorf("failed to create request: %w", err)
+			continue
+		}
+
+		req.Header.Set("Content-Type", "application/json")
+
+		resp, err := client.Do(req)
+		if err != nil {
+			lastErr = fmt.Errorf("failed to execute request: %w", err)
+			continue
+		}
+
+		body, err := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if err != nil {
+			lastErr = fmt.Errorf("failed to read response: %w", err)
+			continue
+		}
+
+		var rpcResp RPCResponse
+		if err := json.Unmarshal(body, &rpcResp); err != nil {
+			lastErr = fmt.Errorf("failed to unmarshal response: %w", err)
+			continue
+		}
+
+		if rpcResp.Error != nil {
+			lastErr = fmt.Errorf("RPC error: %s (code: %d)", rpcResp.Error.Message, rpcResp.Error.Code)
+			continue
+		}
+
+		return rpcResp.Result, nil
 	}
 
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("failed to execute request: %w", err)
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read response: %w", err)
-	}
-
-	var rpcResp RPCResponse
-	if err := json.Unmarshal(body, &rpcResp); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal response: %w", err)
-	}
-
-	if rpcResp.Error != nil {
-		return nil, fmt.Errorf("RPC error: %s (code: %d)", rpcResp.Error.Message, rpcResp.Error.Code)
-	}
-
-	return rpcResp.Result, nil
+	return nil, fmt.Errorf("RPC call failed after %d attempts: %w", maxAttempts, lastErr)
 }
 
 func GetBlockCount() (int64, error) {

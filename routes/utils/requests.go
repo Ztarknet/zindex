@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+
+	"github.com/keep-starknet-strange/ztarknet/zindex/internal/config"
 )
 
 func ReadJsonBody[T any](r *http.Request) (*T, error) {
@@ -45,14 +47,41 @@ func ParseQueryParamInt(r *http.Request, param string, defaultValue int) int {
 	return intValue
 }
 
+// GetDefaultPaginationLimit returns the default pagination limit from config
+func GetDefaultPaginationLimit() int {
+	return config.Conf.Api.Pagination.DefaultLimit
+}
+
 // NormalizePagination validates and normalizes limit and offset parameters
-// Ensures limit is between 1 and maxLimit (default 100), and offset is non-negative
+// Uses pagination configuration from config (max_limit and max_offset)
 func NormalizePagination(limit, offset int) (int, int) {
-	return NormalizePaginationWithMax(limit, offset, 100)
+	maxLimit := config.Conf.Api.Pagination.MaxLimit
+	maxOffset := config.Conf.Api.Pagination.MaxOffset
+
+	// Cap limit at maxLimit from config
+	if limit > maxLimit {
+		limit = maxLimit
+	}
+	if limit < 1 {
+		limit = 1
+	}
+
+	// Ensure offset is non-negative and within max_offset
+	if offset < 0 {
+		offset = 0
+	}
+	if maxOffset > 0 && offset > maxOffset {
+		offset = maxOffset
+	}
+
+	return limit, offset
 }
 
 // NormalizePaginationWithMax validates and normalizes limit and offset with a custom max limit
+// This is kept for backward compatibility but uses config for max_offset
 func NormalizePaginationWithMax(limit, offset, maxLimit int) (int, int) {
+	maxOffset := config.Conf.Api.Pagination.MaxOffset
+
 	// Cap limit at maxLimit
 	if limit > maxLimit {
 		limit = maxLimit
@@ -61,9 +90,12 @@ func NormalizePaginationWithMax(limit, offset, maxLimit int) (int, int) {
 		limit = 1
 	}
 
-	// Ensure offset is non-negative
+	// Ensure offset is non-negative and within max_offset from config
 	if offset < 0 {
 		offset = 0
+	}
+	if maxOffset > 0 && offset > maxOffset {
+		offset = maxOffset
 	}
 
 	return limit, offset

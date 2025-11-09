@@ -84,7 +84,7 @@ func GetTransactionsByType(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	limit := utils.ParseQueryParamInt(r, "limit", 50)
+	limit := utils.ParseQueryParamInt(r, "limit", utils.GetDefaultPaginationLimit())
 	offset := utils.ParseQueryParamInt(r, "offset", 0)
 
 
@@ -98,7 +98,7 @@ func GetRecentTransactions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	limit := utils.ParseQueryParamInt(r, "limit", 50)
+	limit := utils.ParseQueryParamInt(r, "limit", utils.GetDefaultPaginationLimit())
 	offset := utils.ParseQueryParamInt(r, "offset", 0)
 
 
