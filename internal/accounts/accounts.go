@@ -8,6 +8,11 @@ import (
 	"github.com/keep-starknet-strange/ztarknet/zindex/internal/db/postgres"
 )
 
+func init() {
+	// Register this module's schema initialization with the postgres package
+	postgres.RegisterModuleSchema("ACCOUNTS", InitSchema)
+}
+
 // InitSchema creates the account tables and indexes
 func InitSchema() error {
 	schema := `

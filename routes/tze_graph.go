@@ -89,7 +89,13 @@ func GetTzeInputsByType(w http.ResponseWriter, r *http.Request) {
 
 	limit := utils.ParseQueryParamInt(r, "limit", utils.GetDefaultPaginationLimit())
 	offset := utils.ParseQueryParamInt(r, "offset", 0)
+	limit, offset = utils.NormalizePagination(limit, offset)
 
+	inputs, err := tze_graph.GetTzeInputsByType(tzeType, limit, offset)
+	if err != nil {
+		utils.WriteErrorJson(w, http.StatusInternalServerError, err.Error())
+		return
+	}
 
 	utils.WriteDataJson(w, inputs)
 }
@@ -118,7 +124,13 @@ func GetTzeInputsByMode(w http.ResponseWriter, r *http.Request) {
 
 	limit := utils.ParseQueryParamInt(r, "limit", utils.GetDefaultPaginationLimit())
 	offset := utils.ParseQueryParamInt(r, "offset", 0)
+	limit, offset = utils.NormalizePagination(limit, offset)
 
+	inputs, err := tze_graph.GetTzeInputsByMode(tzeMode, limit, offset)
+	if err != nil {
+		utils.WriteErrorJson(w, http.StatusInternalServerError, err.Error())
+		return
+	}
 
 	utils.WriteDataJson(w, inputs)
 }
@@ -164,7 +176,13 @@ func GetTzeInputsByTypeAndMode(w http.ResponseWriter, r *http.Request) {
 
 	limit := utils.ParseQueryParamInt(r, "limit", utils.GetDefaultPaginationLimit())
 	offset := utils.ParseQueryParamInt(r, "offset", 0)
+	limit, offset = utils.NormalizePagination(limit, offset)
 
+	inputs, err := tze_graph.GetTzeInputsByTypeAndMode(tzeType, tzeMode, limit, offset)
+	if err != nil {
+		utils.WriteErrorJson(w, http.StatusInternalServerError, err.Error())
+		return
+	}
 
 	utils.WriteDataJson(w, inputs)
 }
@@ -287,7 +305,13 @@ func GetAllUnspentTzeOutputs(w http.ResponseWriter, r *http.Request) {
 
 	limit := utils.ParseQueryParamInt(r, "limit", utils.GetDefaultPaginationLimit())
 	offset := utils.ParseQueryParamInt(r, "offset", 0)
+	limit, offset = utils.NormalizePagination(limit, offset)
 
+	outputs, err := tze_graph.GetAllUnspentTzeOutputs(limit, offset)
+	if err != nil {
+		utils.WriteErrorJson(w, http.StatusInternalServerError, err.Error())
+		return
+	}
 
 	utils.WriteDataJson(w, outputs)
 }
@@ -314,7 +338,13 @@ func GetTzeOutputsByType(w http.ResponseWriter, r *http.Request) {
 
 	limit := utils.ParseQueryParamInt(r, "limit", utils.GetDefaultPaginationLimit())
 	offset := utils.ParseQueryParamInt(r, "offset", 0)
+	limit, offset = utils.NormalizePagination(limit, offset)
 
+	outputs, err := tze_graph.GetTzeOutputsByType(tzeType, limit, offset)
+	if err != nil {
+		utils.WriteErrorJson(w, http.StatusInternalServerError, err.Error())
+		return
+	}
 
 	utils.WriteDataJson(w, outputs)
 }
@@ -343,7 +373,13 @@ func GetTzeOutputsByMode(w http.ResponseWriter, r *http.Request) {
 
 	limit := utils.ParseQueryParamInt(r, "limit", utils.GetDefaultPaginationLimit())
 	offset := utils.ParseQueryParamInt(r, "offset", 0)
+	limit, offset = utils.NormalizePagination(limit, offset)
 
+	outputs, err := tze_graph.GetTzeOutputsByMode(tzeMode, limit, offset)
+	if err != nil {
+		utils.WriteErrorJson(w, http.StatusInternalServerError, err.Error())
+		return
+	}
 
 	utils.WriteDataJson(w, outputs)
 }
@@ -389,7 +425,13 @@ func GetTzeOutputsByTypeAndMode(w http.ResponseWriter, r *http.Request) {
 
 	limit := utils.ParseQueryParamInt(r, "limit", utils.GetDefaultPaginationLimit())
 	offset := utils.ParseQueryParamInt(r, "offset", 0)
+	limit, offset = utils.NormalizePagination(limit, offset)
 
+	outputs, err := tze_graph.GetTzeOutputsByTypeAndMode(tzeType, tzeMode, limit, offset)
+	if err != nil {
+		utils.WriteErrorJson(w, http.StatusInternalServerError, err.Error())
+		return
+	}
 
 	utils.WriteDataJson(w, outputs)
 }
@@ -416,7 +458,13 @@ func GetUnspentTzeOutputsByType(w http.ResponseWriter, r *http.Request) {
 
 	limit := utils.ParseQueryParamInt(r, "limit", utils.GetDefaultPaginationLimit())
 	offset := utils.ParseQueryParamInt(r, "offset", 0)
+	limit, offset = utils.NormalizePagination(limit, offset)
 
+	outputs, err := tze_graph.GetUnspentTzeOutputsByType(tzeType, limit, offset)
+	if err != nil {
+		utils.WriteErrorJson(w, http.StatusInternalServerError, err.Error())
+		return
+	}
 
 	utils.WriteDataJson(w, outputs)
 }
@@ -462,7 +510,13 @@ func GetUnspentTzeOutputsByTypeAndMode(w http.ResponseWriter, r *http.Request) {
 
 	limit := utils.ParseQueryParamInt(r, "limit", utils.GetDefaultPaginationLimit())
 	offset := utils.ParseQueryParamInt(r, "offset", 0)
+	limit, offset = utils.NormalizePagination(limit, offset)
 
+	outputs, err := tze_graph.GetUnspentTzeOutputsByTypeAndMode(tzeType, tzeMode, limit, offset)
+	if err != nil {
+		utils.WriteErrorJson(w, http.StatusInternalServerError, err.Error())
+		return
+	}
 
 	utils.WriteDataJson(w, outputs)
 }
@@ -476,7 +530,13 @@ func GetSpentTzeOutputs(w http.ResponseWriter, r *http.Request) {
 
 	limit := utils.ParseQueryParamInt(r, "limit", utils.GetDefaultPaginationLimit())
 	offset := utils.ParseQueryParamInt(r, "offset", 0)
+	limit, offset = utils.NormalizePagination(limit, offset)
 
+	outputs, err := tze_graph.GetSpentTzeOutputs(limit, offset)
+	if err != nil {
+		utils.WriteErrorJson(w, http.StatusInternalServerError, err.Error())
+		return
+	}
 
 	utils.WriteDataJson(w, outputs)
 }
@@ -496,7 +556,13 @@ func GetTzeOutputsByValue(w http.ResponseWriter, r *http.Request) {
 
 	limit := utils.ParseQueryParamInt(r, "limit", utils.GetDefaultPaginationLimit())
 	offset := utils.ParseQueryParamInt(r, "offset", 0)
+	limit, offset = utils.NormalizePagination(limit, offset)
 
+	outputs, err := tze_graph.GetTzeOutputsByValue(minValue, limit, offset)
+	if err != nil {
+		utils.WriteErrorJson(w, http.StatusInternalServerError, err.Error())
+		return
+	}
 
 	utils.WriteDataJson(w, outputs)
 }

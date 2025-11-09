@@ -11,13 +11,19 @@ import (
 	"github.com/keep-starknet-strange/ztarknet/zindex/internal/db/postgres"
 	"github.com/keep-starknet-strange/ztarknet/zindex/internal/provider"
 	"github.com/keep-starknet-strange/ztarknet/zindex/routes"
+
+	// Import modules to register their schema initialization functions
+	_ "github.com/keep-starknet-strange/ztarknet/zindex/internal/accounts"
+	_ "github.com/keep-starknet-strange/ztarknet/zindex/internal/starks"
+	_ "github.com/keep-starknet-strange/ztarknet/zindex/internal/tx_graph"
+	_ "github.com/keep-starknet-strange/ztarknet/zindex/internal/tze_graph"
 )
 
 func main() {
 	var (
-		configPath  string
-		rpcURL      string
-		startBlock  int64
+		configPath string
+		rpcURL     string
+		startBlock int64
 	)
 
 	flag.StringVar(&configPath, "config", "configs/config.yaml", "Path to config file")

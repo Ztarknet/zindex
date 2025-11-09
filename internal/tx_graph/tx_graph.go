@@ -8,6 +8,11 @@ import (
 	"github.com/keep-starknet-strange/ztarknet/zindex/internal/db/postgres"
 )
 
+func init() {
+	// Register this module's schema initialization with the postgres package
+	postgres.RegisterModuleSchema("TX_GRAPH", InitSchema)
+}
+
 // InitSchema creates the transaction graph tables and indexes
 func InitSchema() error {
 	schema := `

@@ -7,8 +7,8 @@ type TzeInput struct {
 	Value    int64  `json:"value" db:"value"`
 	PrevTxID string `json:"prev_txid" db:"prev_txid"`
 	PrevVout int    `json:"prev_vout" db:"prev_vout"`
-	TzeType  int16  `json:"tze_type" db:"tze_type"`   // 0=demo, 1=stark_verify
-	TzeMode  int16  `json:"tze_mode" db:"tze_mode"`   // demo: 0=open, 1=close; stark_verify: 0=initialize, 1=verify
+	TzeType  int16  `json:"tze_type" db:"tze_type"` // 0=demo, 1=stark_verify
+	TzeMode  int16  `json:"tze_mode" db:"tze_mode"` // demo: 0=open, 1=close; stark_verify: 0=initialize, 1=verify
 }
 
 // TzeOutput represents a TZE output in a transaction

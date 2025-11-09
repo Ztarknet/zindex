@@ -86,7 +86,13 @@ func GetTransactionsByType(w http.ResponseWriter, r *http.Request) {
 
 	limit := utils.ParseQueryParamInt(r, "limit", utils.GetDefaultPaginationLimit())
 	offset := utils.ParseQueryParamInt(r, "offset", 0)
+	limit, offset = utils.NormalizePagination(limit, offset)
 
+	txs, err := tx_graph.GetTransactionsByType(txType, limit, offset)
+	if err != nil {
+		utils.WriteErrorJson(w, http.StatusInternalServerError, err.Error())
+		return
+	}
 
 	utils.WriteDataJson(w, txs)
 }
@@ -100,7 +106,13 @@ func GetRecentTransactions(w http.ResponseWriter, r *http.Request) {
 
 	limit := utils.ParseQueryParamInt(r, "limit", utils.GetDefaultPaginationLimit())
 	offset := utils.ParseQueryParamInt(r, "offset", 0)
+	limit, offset = utils.NormalizePagination(limit, offset)
 
+	txs, err := tx_graph.GetRecentTransactions(limit, offset)
+	if err != nil {
+		utils.WriteErrorJson(w, http.StatusInternalServerError, err.Error())
+		return
+	}
 
 	utils.WriteDataJson(w, txs)
 }
@@ -300,9 +312,10 @@ func GetTransactionGraph(w http.ResponseWriter, r *http.Request) {
 	if depth < 1 {
 		depth = 1
 	}
-	// Cap depth at 10 to prevent excessive recursion
-	if depth > 10 {
-		depth = 10
+	// Cap depth at configured max_graph_depth to prevent excessive recursion
+	maxDepth := config.Conf.Modules.TxGraph.MaxGraphDepth
+	if depth > maxDepth {
+		depth = maxDepth
 	}
 
 	txids, err := tx_graph.GetTransactionGraph(txid, depth)

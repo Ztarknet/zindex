@@ -277,5 +277,32 @@ func validateConfig() error {
 		}
 	}
 
+	// Validate Indexer configuration
+	if Conf.Indexer.BatchSize <= 0 {
+		return fmt.Errorf("indexer.batch_size must be greater than 0")
+	}
+	if Conf.Indexer.PollInterval <= 0 {
+		return fmt.Errorf("indexer.poll_interval must be greater than 0")
+	}
+	if Conf.Indexer.StartBlock < 0 {
+		return fmt.Errorf("indexer.start_block must be non-negative")
+	}
+	if Conf.Indexer.MaxReorgDepth < 0 {
+		return fmt.Errorf("indexer.max_reorg_depth must be non-negative")
+	}
+
+	// Validate Module configurations
+	if Conf.Modules.TxGraph.Enabled {
+		if Conf.Modules.TxGraph.MaxGraphDepth <= 0 {
+			return fmt.Errorf("modules.tx_graph.max_graph_depth must be greater than 0")
+		}
+	}
+
+	if Conf.Modules.TzeGraph.Enabled {
+		if Conf.Modules.TzeGraph.MaxPreconditionSize <= 0 {
+			return fmt.Errorf("modules.tze_graph.max_precondition_size must be greater than 0")
+		}
+	}
+
 	return nil
 }

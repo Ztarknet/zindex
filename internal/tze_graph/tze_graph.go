@@ -5,8 +5,14 @@ import (
 	"fmt"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/keep-starknet-strange/ztarknet/zindex/internal/config"
 	"github.com/keep-starknet-strange/ztarknet/zindex/internal/db/postgres"
 )
+
+func init() {
+	// Register this module's schema initialization with the postgres package
+	postgres.RegisterModuleSchema("TZE_GRAPH", InitSchema)
+}
 
 func InitSchema() error {
 	schema := `
@@ -60,6 +66,16 @@ func InitSchema() error {
 		return fmt.Errorf("failed to create tze_graph schema: %w", err)
 	}
 
+	return nil
+}
+
+// ValidatePreconditionSize validates that a precondition does not exceed the configured maximum size
+func ValidatePreconditionSize(precondition []byte) error {
+	maxSize := config.Conf.Modules.TzeGraph.MaxPreconditionSize
+	if len(precondition) > maxSize {
+		return fmt.Errorf("precondition size (%d bytes) exceeds maximum allowed size (%d bytes)",
+			len(precondition), maxSize)
+	}
 	return nil
 }
 

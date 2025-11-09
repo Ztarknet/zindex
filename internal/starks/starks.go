@@ -5,8 +5,14 @@ import (
 	"fmt"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/keep-starknet-strange/ztarknet/zindex/internal/config"
 	"github.com/keep-starknet-strange/ztarknet/zindex/internal/db/postgres"
 )
+
+func init() {
+	// Register this module's schema initialization with the postgres package
+	postgres.RegisterModuleSchema("STARKS", InitSchema)
+}
 
 // InitSchema creates the starks module tables and indexes
 func InitSchema() error {
@@ -70,6 +76,11 @@ func InitSchema() error {
 	}
 
 	return nil
+}
+
+// ShouldIndexZtarknet returns whether ztarknet facts should be indexed based on configuration
+func ShouldIndexZtarknet() bool {
+	return config.Conf.Modules.Starks.IndexZtarknet
 }
 
 // ============================================================================

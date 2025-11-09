@@ -14,6 +14,17 @@ import (
 
 var DB *pgxpool.Pool
 
+// SchemaInitFunc is a function type for module schema initialization
+type SchemaInitFunc func() error
+
+// registeredModuleSchemas holds the schema initialization functions for enabled modules
+var registeredModuleSchemas = make(map[string]SchemaInitFunc)
+
+// RegisterModuleSchema registers a module's schema initialization function
+func RegisterModuleSchema(moduleName string, initFunc SchemaInitFunc) {
+	registeredModuleSchemas[moduleName] = initFunc
+}
+
 func InitPostgres() error {
 	if !config.ShouldConnectPostgres() {
 		log.Println("PostgreSQL connection disabled in config")
@@ -81,7 +92,8 @@ func ClosePostgres() {
 func initSchema() error {
 	log.Println("Initializing database schema...")
 
-	schema := `
+	// Core schema (always initialized)
+	coreSchema := `
 		CREATE TABLE IF NOT EXISTS indexer_state (
 			id SERIAL PRIMARY KEY,
 			last_indexed_block BIGINT NOT NULL DEFAULT 0,
@@ -104,26 +116,14 @@ func initSchema() error {
 
 		CREATE INDEX IF NOT EXISTS idx_blocks_hash ON blocks(hash);
 		CREATE INDEX IF NOT EXISTS idx_blocks_timestamp ON blocks(timestamp);
-
-		CREATE TABLE IF NOT EXISTS transactions (
-			txid VARCHAR(64) PRIMARY KEY,
-			block_height BIGINT REFERENCES blocks(height),
-			version INT,
-			locktime BIGINT,
-			expiry_height BIGINT,
-			size INT,
-			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-		);
-
-		CREATE INDEX IF NOT EXISTS idx_transactions_block_height ON transactions(block_height);
-		CREATE INDEX IF NOT EXISTS idx_transactions_expiry ON transactions(expiry_height);
 	`
 
-	_, err := DB.Exec(context.Background(), schema)
+	_, err := DB.Exec(context.Background(), coreSchema)
 	if err != nil {
-		return fmt.Errorf("failed to create schema: %w", err)
+		return fmt.Errorf("failed to create core schema: %w", err)
 	}
 
+	// Initialize indexer_state if empty
 	var count int
 	err = DB.QueryRow(context.Background(), "SELECT COUNT(*) FROM indexer_state").Scan(&count)
 	if err != nil {
@@ -137,7 +137,30 @@ func initSchema() error {
 		}
 	}
 
-	log.Println("Database schema initialized successfully")
+	log.Println("Core schema initialized successfully")
+
+	// Initialize module schemas based on configuration
+	if err := initModuleSchemas(); err != nil {
+		return fmt.Errorf("failed to initialize module schemas: %w", err)
+	}
+
+	return nil
+}
+
+func initModuleSchemas() error {
+	// Initialize registered module schemas based on enabled modules in configuration
+	for moduleName, initFunc := range registeredModuleSchemas {
+		if config.IsModuleEnabled(moduleName) {
+			log.Printf("Initializing %s module schema...", moduleName)
+			if err := initFunc(); err != nil {
+				return fmt.Errorf("failed to initialize %s schema: %w", moduleName, err)
+			}
+			log.Printf("%s module schema initialized successfully", moduleName)
+		} else {
+			log.Printf("Skipping %s module schema initialization (module disabled)", moduleName)
+		}
+	}
+
 	return nil
 }
 
