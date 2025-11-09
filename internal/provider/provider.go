@@ -136,12 +136,31 @@ func indexBlock(height int64) error {
 		return fmt.Errorf("failed to get block: %w", err)
 	}
 
+	// TODO: Implement reorg detection and handling
+	// Config options available: config.Conf.Indexer.EnableReorgHandling, config.Conf.Indexer.MaxReorgDepth
+	// When implemented, should:
+	//   1. Compare block's previousblockhash with stored hash at height-1
+	//   2. If mismatch detected, search backward up to max_reorg_depth to find common ancestor
+	//   3. Rollback database to common ancestor
+	//   4. Continue indexing from rollback point
+
+	// Extract previous block hash from block data
+	var prevHash string
+	if val, ok := block["previousblockhash"].(string); ok {
+		prevHash = val
+	}
+
+	// Store block data
+	if err := postgres.StoreBlock(height, blockHash, prevHash, block); err != nil {
+		return fmt.Errorf("failed to store block: %w", err)
+	}
+
+	// Update indexer state
 	if err := postgres.UpdateLastIndexedBlock(height, blockHash); err != nil {
 		return fmt.Errorf("failed to update last indexed block: %w", err)
 	}
 
 	log.Printf("Indexed block %d: %s", height, blockHash)
-	_ = block
 
 	return nil
 }

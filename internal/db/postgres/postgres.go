@@ -173,6 +173,11 @@ func GetLastIndexedBlock() (int64, error) {
 	return lastBlock, nil
 }
 
+// TODO: Add reorg handling functions when needed:
+// - GetLastIndexedHash() - Get last indexed block hash
+// - GetBlockAtHeight(height) - Get stored block hash at specific height
+// - RollbackToBlock(height) - Remove blocks after specified height
+
 func UpdateLastIndexedBlock(height int64, hash string) error {
 	_, err := DB.Exec(
 		context.Background(),
@@ -182,6 +187,58 @@ func UpdateLastIndexedBlock(height int64, hash string) error {
 	if err != nil {
 		return fmt.Errorf("failed to update last indexed block: %w", err)
 	}
+	return nil
+}
+
+// StoreBlock inserts or updates a block in the database
+func StoreBlock(height int64, hash string, prevHash string, block map[string]interface{}) error {
+	ctx := context.Background()
+
+	// Extract block fields
+	var merkleRoot, difficulty, nonce string
+	var timestamp int64
+	var version, txCount int
+
+	if val, ok := block["merkleroot"].(string); ok {
+		merkleRoot = val
+	}
+	if val, ok := block["difficulty"].(float64); ok {
+		difficulty = fmt.Sprintf("%f", val)
+	} else if val, ok := block["difficulty"].(string); ok {
+		difficulty = val
+	}
+	if val, ok := block["nonce"].(string); ok {
+		nonce = val
+	}
+	if val, ok := block["time"].(float64); ok {
+		timestamp = int64(val)
+	}
+	if val, ok := block["version"].(float64); ok {
+		version = int(val)
+	}
+	if tx, ok := block["tx"].([]interface{}); ok {
+		txCount = len(tx)
+	}
+
+	query := `
+		INSERT INTO blocks (height, hash, prev_hash, merkle_root, timestamp, difficulty, nonce, version, tx_count)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+		ON CONFLICT (height) DO UPDATE SET
+			hash = EXCLUDED.hash,
+			prev_hash = EXCLUDED.prev_hash,
+			merkle_root = EXCLUDED.merkle_root,
+			timestamp = EXCLUDED.timestamp,
+			difficulty = EXCLUDED.difficulty,
+			nonce = EXCLUDED.nonce,
+			version = EXCLUDED.version,
+			tx_count = EXCLUDED.tx_count
+	`
+
+	_, err := DB.Exec(ctx, query, height, hash, prevHash, merkleRoot, timestamp, difficulty, nonce, version, txCount)
+	if err != nil {
+		return fmt.Errorf("failed to store block %d: %w", height, err)
+	}
+
 	return nil
 }
 

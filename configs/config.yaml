@@ -56,7 +56,7 @@ indexer:
   poll_interval: 5
   start_block: 0
 
-  enable_reorg_handling: true
+  enable_reorg_handling: false
   max_reorg_depth: 5
 
 # Module Configuration
@@ -69,7 +69,7 @@ modules:
   # TZE (Trusted Extension) Graph - Tracks TZE transactions
   tze_graph:
     enabled: true
-    max_precondition_size: 1048576
+    max_precondition_size: 16384 # 16Kb
 
   # STARKS - Zero-knowledge proof verification and tracking
   starks:
