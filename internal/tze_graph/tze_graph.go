@@ -10,27 +10,49 @@ import (
 
 func InitSchema() error {
 	schema := `
-		CREATE TABLE IF NOT EXISTS tze_transactions (
-			txid VARCHAR(64) PRIMARY KEY,
-			block_height BIGINT NOT NULL,
-			tze_type VARCHAR(64) NOT NULL,
-			payload BYTEA,
-			witness_data BYTEA,
-			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+		-- TZE Inputs table
+		CREATE TABLE IF NOT EXISTS tze_inputs (
+			txid VARCHAR(64) NOT NULL,
+			vin INT NOT NULL,
+			value BIGINT NOT NULL,
+			prev_txid VARCHAR(64) NOT NULL,
+			prev_vout INT NOT NULL,
+			tze_type SMALLINT NOT NULL,  -- 0=demo, 1=stark_verify
+			tze_mode SMALLINT NOT NULL,  -- demo: 0=open, 1=close; stark_verify: 0=initialize, 1=verify
+			PRIMARY KEY (txid, vin)
 		);
 
-		CREATE INDEX IF NOT EXISTS idx_tze_transactions_block_height ON tze_transactions(block_height);
-		CREATE INDEX IF NOT EXISTS idx_tze_transactions_type ON tze_transactions(tze_type);
+		-- Indexes for tze_inputs
+		CREATE INDEX IF NOT EXISTS idx_tze_inputs_txid ON tze_inputs(txid);
+		CREATE INDEX IF NOT EXISTS idx_tze_inputs_prev ON tze_inputs(prev_txid, prev_vout);
+		CREATE INDEX IF NOT EXISTS idx_tze_inputs_type ON tze_inputs(tze_type);
+		CREATE INDEX IF NOT EXISTS idx_tze_inputs_mode ON tze_inputs(tze_mode);
+		CREATE INDEX IF NOT EXISTS idx_tze_inputs_type_mode ON tze_inputs(tze_type, tze_mode);
 
-		CREATE TABLE IF NOT EXISTS tze_witnesses (
-			id SERIAL PRIMARY KEY,
-			txid VARCHAR(64) NOT NULL REFERENCES tze_transactions(txid),
-			witness_type VARCHAR(64) NOT NULL,
-			data BYTEA,
-			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+		-- TZE Outputs table
+		CREATE TABLE IF NOT EXISTS tze_outputs (
+			txid VARCHAR(64) NOT NULL,
+			vout INT NOT NULL,
+			value BIGINT NOT NULL,
+			spent_by_txid VARCHAR(64),
+			spent_by_vin INT,
+			spent_at_height BIGINT,
+			tze_type SMALLINT NOT NULL,  -- 0=demo, 1=stark_verify
+			tze_mode SMALLINT NOT NULL,  -- demo: 0=open, 1=close; stark_verify: 0=initialize, 1=verify
+			precondition BYTEA,
+			PRIMARY KEY (txid, vout)
 		);
 
-		CREATE INDEX IF NOT EXISTS idx_tze_witnesses_txid ON tze_witnesses(txid);
+		-- Indexes for tze_outputs
+		CREATE INDEX IF NOT EXISTS idx_tze_outputs_txid ON tze_outputs(txid);
+		CREATE INDEX IF NOT EXISTS idx_tze_outputs_spent_by ON tze_outputs(spent_by_txid)
+			WHERE spent_by_txid IS NOT NULL;
+		CREATE INDEX IF NOT EXISTS idx_tze_outputs_unspent ON tze_outputs(txid, vout)
+			WHERE spent_by_txid IS NULL;
+		CREATE INDEX IF NOT EXISTS idx_tze_outputs_type ON tze_outputs(tze_type);
+		CREATE INDEX IF NOT EXISTS idx_tze_outputs_mode ON tze_outputs(tze_mode);
+		CREATE INDEX IF NOT EXISTS idx_tze_outputs_type_mode ON tze_outputs(tze_type, tze_mode);
+		CREATE INDEX IF NOT EXISTS idx_tze_outputs_value ON tze_outputs(value);
 	`
 
 	_, err := postgres.DB.Exec(context.Background(), schema)
@@ -41,46 +63,310 @@ func InitSchema() error {
 	return nil
 }
 
-func GetTZETransaction(txid string) (*TZETransaction, error) {
-	tx, err := postgres.PostgresQueryOne[TZETransaction](
-		`SELECT txid, block_height, tze_type, payload, witness_data, created_at
-		 FROM tze_transactions WHERE txid = $1`,
+// ============================================================================
+// TZE INPUT QUERIES
+// ============================================================================
+
+// GetTzeInputs retrieves all inputs for a transaction
+func GetTzeInputs(txid string) ([]TzeInput, error) {
+	inputs, err := postgres.PostgresQuery[TzeInput](
+		`SELECT txid, vin, value, prev_txid, prev_vout, tze_type, tze_mode
+		 FROM tze_inputs
+		 WHERE txid = $1
+		 ORDER BY vin`,
 		txid,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get tze inputs: %w", err)
+	}
+
+	return inputs, nil
+}
+
+// GetTzeInput retrieves a specific input by txid and vin
+func GetTzeInput(txid string, vin int) (*TzeInput, error) {
+	input, err := postgres.PostgresQueryOne[TzeInput](
+		`SELECT txid, vin, value, prev_txid, prev_vout, tze_type, tze_mode
+		 FROM tze_inputs
+		 WHERE txid = $1 AND vin = $2`,
+		txid, vin,
 	)
 
 	if err == pgx.ErrNoRows {
 		return nil, nil
 	}
 	if err != nil {
-		return nil, fmt.Errorf("failed to get TZE transaction: %w", err)
+		return nil, fmt.Errorf("failed to get tze input: %w", err)
 	}
 
-	return tx, nil
+	return input, nil
 }
 
-func GetTZETransactionsByType(tzeType string, limit, offset int) ([]TZETransaction, error) {
-	txs, err := postgres.PostgresQuery[TZETransaction](
-		`SELECT txid, block_height, tze_type, payload, witness_data, created_at
-		 FROM tze_transactions WHERE tze_type = $1
-		 ORDER BY block_height DESC LIMIT $2 OFFSET $3`,
+// GetTzeInputsByType retrieves all inputs of a specific TZE type with pagination
+func GetTzeInputsByType(tzeType TzeType, limit, offset int) ([]TzeInput, error) {
+	inputs, err := postgres.PostgresQuery[TzeInput](
+		`SELECT txid, vin, value, prev_txid, prev_vout, tze_type, tze_mode
+		 FROM tze_inputs
+		 WHERE tze_type = $1
+		 ORDER BY txid, vin
+		 LIMIT $2 OFFSET $3`,
 		tzeType, limit, offset,
 	)
 	if err != nil {
-		return nil, fmt.Errorf("failed to query TZE transactions: %w", err)
+		return nil, fmt.Errorf("failed to get tze inputs by type: %w", err)
 	}
 
-	return txs, nil
+	return inputs, nil
 }
 
-func GetTZEWitnesses(txid string) ([]TZEWitness, error) {
-	witnesses, err := postgres.PostgresQuery[TZEWitness](
-		`SELECT id, txid, witness_type, data, created_at
-		 FROM tze_witnesses WHERE txid = $1`,
+// GetTzeInputsByMode retrieves all inputs of a specific TZE mode with pagination
+func GetTzeInputsByMode(tzeMode TzeMode, limit, offset int) ([]TzeInput, error) {
+	inputs, err := postgres.PostgresQuery[TzeInput](
+		`SELECT txid, vin, value, prev_txid, prev_vout, tze_type, tze_mode
+		 FROM tze_inputs
+		 WHERE tze_mode = $1
+		 ORDER BY txid, vin
+		 LIMIT $2 OFFSET $3`,
+		tzeMode, limit, offset,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get tze inputs by mode: %w", err)
+	}
+
+	return inputs, nil
+}
+
+// GetTzeInputsByTypeAndMode retrieves all inputs matching both type and mode with pagination
+func GetTzeInputsByTypeAndMode(tzeType TzeType, tzeMode TzeMode, limit, offset int) ([]TzeInput, error) {
+	inputs, err := postgres.PostgresQuery[TzeInput](
+		`SELECT txid, vin, value, prev_txid, prev_vout, tze_type, tze_mode
+		 FROM tze_inputs
+		 WHERE tze_type = $1 AND tze_mode = $2
+		 ORDER BY txid, vin
+		 LIMIT $3 OFFSET $4`,
+		tzeType, tzeMode, limit, offset,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get tze inputs by type and mode: %w", err)
+	}
+
+	return inputs, nil
+}
+
+// GetTzeInputsByPrevOutput retrieves all inputs spending a specific previous output
+func GetTzeInputsByPrevOutput(prevTxid string, prevVout int) ([]TzeInput, error) {
+	inputs, err := postgres.PostgresQuery[TzeInput](
+		`SELECT txid, vin, value, prev_txid, prev_vout, tze_type, tze_mode
+		 FROM tze_inputs
+		 WHERE prev_txid = $1 AND prev_vout = $2
+		 ORDER BY txid, vin`,
+		prevTxid, prevVout,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get tze inputs by prev output: %w", err)
+	}
+
+	return inputs, nil
+}
+
+// ============================================================================
+// TZE OUTPUT QUERIES
+// ============================================================================
+
+// GetTzeOutputs retrieves all outputs for a transaction
+func GetTzeOutputs(txid string) ([]TzeOutput, error) {
+	outputs, err := postgres.PostgresQuery[TzeOutput](
+		`SELECT txid, vout, value, spent_by_txid, spent_by_vin, spent_at_height,
+		        tze_type, tze_mode, precondition
+		 FROM tze_outputs
+		 WHERE txid = $1
+		 ORDER BY vout`,
 		txid,
 	)
 	if err != nil {
-		return nil, fmt.Errorf("failed to query TZE witnesses: %w", err)
+		return nil, fmt.Errorf("failed to get tze outputs: %w", err)
 	}
 
-	return witnesses, nil
+	return outputs, nil
+}
+
+// GetTzeOutput retrieves a specific output by txid and vout
+func GetTzeOutput(txid string, vout int) (*TzeOutput, error) {
+	output, err := postgres.PostgresQueryOne[TzeOutput](
+		`SELECT txid, vout, value, spent_by_txid, spent_by_vin, spent_at_height,
+		        tze_type, tze_mode, precondition
+		 FROM tze_outputs
+		 WHERE txid = $1 AND vout = $2`,
+		txid, vout,
+	)
+
+	if err == pgx.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("failed to get tze output: %w", err)
+	}
+
+	return output, nil
+}
+
+// GetUnspentTzeOutputs retrieves all unspent outputs for a transaction
+func GetUnspentTzeOutputs(txid string) ([]TzeOutput, error) {
+	outputs, err := postgres.PostgresQuery[TzeOutput](
+		`SELECT txid, vout, value, spent_by_txid, spent_by_vin, spent_at_height,
+		        tze_type, tze_mode, precondition
+		 FROM tze_outputs
+		 WHERE txid = $1 AND spent_by_txid IS NULL
+		 ORDER BY vout`,
+		txid,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get unspent tze outputs: %w", err)
+	}
+
+	return outputs, nil
+}
+
+// GetAllUnspentTzeOutputs retrieves all unspent TZE outputs with pagination
+func GetAllUnspentTzeOutputs(limit, offset int) ([]TzeOutput, error) {
+	outputs, err := postgres.PostgresQuery[TzeOutput](
+		`SELECT txid, vout, value, spent_by_txid, spent_by_vin, spent_at_height,
+		        tze_type, tze_mode, precondition
+		 FROM tze_outputs
+		 WHERE spent_by_txid IS NULL
+		 ORDER BY txid, vout
+		 LIMIT $1 OFFSET $2`,
+		limit, offset,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get all unspent tze outputs: %w", err)
+	}
+
+	return outputs, nil
+}
+
+// GetTzeOutputsByType retrieves all outputs of a specific TZE type with pagination
+func GetTzeOutputsByType(tzeType TzeType, limit, offset int) ([]TzeOutput, error) {
+	outputs, err := postgres.PostgresQuery[TzeOutput](
+		`SELECT txid, vout, value, spent_by_txid, spent_by_vin, spent_at_height,
+		        tze_type, tze_mode, precondition
+		 FROM tze_outputs
+		 WHERE tze_type = $1
+		 ORDER BY txid, vout
+		 LIMIT $2 OFFSET $3`,
+		tzeType, limit, offset,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get tze outputs by type: %w", err)
+	}
+
+	return outputs, nil
+}
+
+// GetTzeOutputsByMode retrieves all outputs of a specific TZE mode with pagination
+func GetTzeOutputsByMode(tzeMode TzeMode, limit, offset int) ([]TzeOutput, error) {
+	outputs, err := postgres.PostgresQuery[TzeOutput](
+		`SELECT txid, vout, value, spent_by_txid, spent_by_vin, spent_at_height,
+		        tze_type, tze_mode, precondition
+		 FROM tze_outputs
+		 WHERE tze_mode = $1
+		 ORDER BY txid, vout
+		 LIMIT $2 OFFSET $3`,
+		tzeMode, limit, offset,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get tze outputs by mode: %w", err)
+	}
+
+	return outputs, nil
+}
+
+// GetTzeOutputsByTypeAndMode retrieves all outputs matching both type and mode with pagination
+func GetTzeOutputsByTypeAndMode(tzeType TzeType, tzeMode TzeMode, limit, offset int) ([]TzeOutput, error) {
+	outputs, err := postgres.PostgresQuery[TzeOutput](
+		`SELECT txid, vout, value, spent_by_txid, spent_by_vin, spent_at_height,
+		        tze_type, tze_mode, precondition
+		 FROM tze_outputs
+		 WHERE tze_type = $1 AND tze_mode = $2
+		 ORDER BY txid, vout
+		 LIMIT $3 OFFSET $4`,
+		tzeType, tzeMode, limit, offset,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get tze outputs by type and mode: %w", err)
+	}
+
+	return outputs, nil
+}
+
+// GetUnspentTzeOutputsByType retrieves all unspent outputs of a specific type with pagination
+func GetUnspentTzeOutputsByType(tzeType TzeType, limit, offset int) ([]TzeOutput, error) {
+	outputs, err := postgres.PostgresQuery[TzeOutput](
+		`SELECT txid, vout, value, spent_by_txid, spent_by_vin, spent_at_height,
+		        tze_type, tze_mode, precondition
+		 FROM tze_outputs
+		 WHERE tze_type = $1 AND spent_by_txid IS NULL
+		 ORDER BY txid, vout
+		 LIMIT $2 OFFSET $3`,
+		tzeType, limit, offset,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get unspent tze outputs by type: %w", err)
+	}
+
+	return outputs, nil
+}
+
+// GetUnspentTzeOutputsByTypeAndMode retrieves all unspent outputs matching type and mode
+func GetUnspentTzeOutputsByTypeAndMode(tzeType TzeType, tzeMode TzeMode, limit, offset int) ([]TzeOutput, error) {
+	outputs, err := postgres.PostgresQuery[TzeOutput](
+		`SELECT txid, vout, value, spent_by_txid, spent_by_vin, spent_at_height,
+		        tze_type, tze_mode, precondition
+		 FROM tze_outputs
+		 WHERE tze_type = $1 AND tze_mode = $2 AND spent_by_txid IS NULL
+		 ORDER BY txid, vout
+		 LIMIT $3 OFFSET $4`,
+		tzeType, tzeMode, limit, offset,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get unspent tze outputs by type and mode: %w", err)
+	}
+
+	return outputs, nil
+}
+
+// GetSpentTzeOutputs retrieves all spent outputs with pagination
+func GetSpentTzeOutputs(limit, offset int) ([]TzeOutput, error) {
+	outputs, err := postgres.PostgresQuery[TzeOutput](
+		`SELECT txid, vout, value, spent_by_txid, spent_by_vin, spent_at_height,
+		        tze_type, tze_mode, precondition
+		 FROM tze_outputs
+		 WHERE spent_by_txid IS NOT NULL
+		 ORDER BY spent_at_height DESC, txid, vout
+		 LIMIT $1 OFFSET $2`,
+		limit, offset,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get spent tze outputs: %w", err)
+	}
+
+	return outputs, nil
+}
+
+// GetTzeOutputsByValue retrieves outputs with value greater than or equal to minimum value
+func GetTzeOutputsByValue(minValue int64, limit, offset int) ([]TzeOutput, error) {
+	outputs, err := postgres.PostgresQuery[TzeOutput](
+		`SELECT txid, vout, value, spent_by_txid, spent_by_vin, spent_at_height,
+		        tze_type, tze_mode, precondition
+		 FROM tze_outputs
+		 WHERE value >= $1
+		 ORDER BY value DESC, txid, vout
+		 LIMIT $2 OFFSET $3`,
+		minValue, limit, offset,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get tze outputs by value: %w", err)
+	}
+
+	return outputs, nil
 }

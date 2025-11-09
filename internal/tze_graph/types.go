@@ -1,20 +1,125 @@
 package tze_graph
 
-import "time"
-
-type TZETransaction struct {
-	TxID        string    `json:"txid"`
-	BlockHeight int64     `json:"block_height"`
-	TZEType     string    `json:"tze_type"`
-	Payload     []byte    `json:"payload"`
-	WitnessData []byte    `json:"witness_data"`
-	CreatedAt   time.Time `json:"created_at"`
+// TzeInput represents a TZE input in a transaction
+type TzeInput struct {
+	TxID     string `json:"txid" db:"txid"`
+	Vin      int    `json:"vin" db:"vin"`
+	Value    int64  `json:"value" db:"value"`
+	PrevTxID string `json:"prev_txid" db:"prev_txid"`
+	PrevVout int    `json:"prev_vout" db:"prev_vout"`
+	TzeType  int16  `json:"tze_type" db:"tze_type"`   // 0=demo, 1=stark_verify
+	TzeMode  int16  `json:"tze_mode" db:"tze_mode"`   // demo: 0=open, 1=close; stark_verify: 0=initialize, 1=verify
 }
 
-type TZEWitness struct {
-	ID          int64     `json:"id"`
-	TxID        string    `json:"txid"`
-	WitnessType string    `json:"witness_type"`
-	Data        []byte    `json:"data"`
-	CreatedAt   time.Time `json:"created_at"`
+// TzeOutput represents a TZE output in a transaction
+type TzeOutput struct {
+	TxID          string  `json:"txid" db:"txid"`
+	Vout          int     `json:"vout" db:"vout"`
+	Value         int64   `json:"value" db:"value"`
+	SpentByTxID   *string `json:"spent_by_txid,omitempty" db:"spent_by_txid"`
+	SpentByVin    *int    `json:"spent_by_vin,omitempty" db:"spent_by_vin"`
+	SpentAtHeight *int64  `json:"spent_at_height,omitempty" db:"spent_at_height"`
+	TzeType       int16   `json:"tze_type" db:"tze_type"`         // 0=demo, 1=stark_verify
+	TzeMode       int16   `json:"tze_mode" db:"tze_mode"`         // demo: 0=open, 1=close; stark_verify: 0=initialize, 1=verify
+	Precondition  []byte  `json:"precondition" db:"precondition"` // TZE precondition data
+}
+
+// TzeType represents the type of TZE transaction
+type TzeType int16
+
+const (
+	TzeTypeDemo        TzeType = 0
+	TzeTypeStarkVerify TzeType = 1
+)
+
+// String returns the string representation of TzeType
+func (t TzeType) String() string {
+	switch t {
+	case TzeTypeDemo:
+		return "demo"
+	case TzeTypeStarkVerify:
+		return "stark_verify"
+	default:
+		return "unknown"
+	}
+}
+
+// ParseTzeType converts a string to TzeType
+func ParseTzeType(s string) (TzeType, bool) {
+	switch s {
+	case "demo":
+		return TzeTypeDemo, true
+	case "stark_verify":
+		return TzeTypeStarkVerify, true
+	default:
+		return -1, false
+	}
+}
+
+// TzeMode represents the mode of TZE operation
+// Note: The meaning of mode values depends on the TzeType
+// For demo: 0=open, 1=close
+// For stark_verify: 0=initialize, 1=verify
+type TzeMode int16
+
+const (
+	// Demo modes
+	TzeModeOpen  TzeMode = 0
+	TzeModeClose TzeMode = 1
+
+	// StarkVerify modes
+	TzeModeInitialize TzeMode = 0
+	TzeModeVerify     TzeMode = 1
+)
+
+// String returns the string representation of TzeMode for a given TzeType
+func (m TzeMode) String(tzeType TzeType) string {
+	switch tzeType {
+	case TzeTypeDemo:
+		switch m {
+		case TzeModeOpen:
+			return "open"
+		case TzeModeClose:
+			return "close"
+		default:
+			return "unknown"
+		}
+	case TzeTypeStarkVerify:
+		switch m {
+		case TzeModeInitialize:
+			return "initialize"
+		case TzeModeVerify:
+			return "verify"
+		default:
+			return "unknown"
+		}
+	default:
+		return "unknown"
+	}
+}
+
+// ParseTzeMode converts a string to TzeMode for a given TzeType
+func ParseTzeMode(s string, tzeType TzeType) (TzeMode, bool) {
+	switch tzeType {
+	case TzeTypeDemo:
+		switch s {
+		case "open":
+			return TzeModeOpen, true
+		case "close":
+			return TzeModeClose, true
+		default:
+			return -1, false
+		}
+	case TzeTypeStarkVerify:
+		switch s {
+		case "initialize":
+			return TzeModeInitialize, true
+		case "verify":
+			return TzeModeVerify, true
+		default:
+			return -1, false
+		}
+	default:
+		return -1, false
+	}
 }

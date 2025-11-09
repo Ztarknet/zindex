@@ -2,18 +2,25 @@ package accounts
 
 import "time"
 
+// Account represents a blockchain account with its basic properties
 type Account struct {
-	Address       string    `json:"address"`
-	Type          string    `json:"type"`
-	Balance       int64     `json:"balance"`
-	TxCount       int64     `json:"tx_count"`
-	FirstSeenAt   time.Time `json:"first_seen_at"`
-	LastActivityAt time.Time `json:"last_activity_at"`
+	Address     string    `json:"address" db:"address"`
+	Balance     int64     `json:"balance" db:"balance"`
+	FirstSeenAt time.Time `json:"first_seen_at" db:"first_seen_at"`
 }
 
-type AccountType string
+// AccountTransaction represents a transaction associated with an account
+type AccountTransaction struct {
+	Address     string `json:"address" db:"address"`
+	TxID        string `json:"txid" db:"txid"`
+	BlockHeight int64  `json:"block_height" db:"block_height"`
+	Type        string `json:"type" db:"type"` // in, out
+}
+
+// AccountTransactionType represents the direction of a transaction relative to an account
+type AccountTransactionType string
 
 const (
-	AccountTypeTransparent AccountType = "transparent"
-	AccountTypeShielded    AccountType = "shielded"
+	TxTypeIn  AccountTransactionType = "in"  // incoming transaction
+	TxTypeOut AccountTransactionType = "out" // outgoing transaction
 )

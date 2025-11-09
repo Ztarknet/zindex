@@ -8,23 +8,60 @@ import (
 	"github.com/keep-starknet-strange/ztarknet/zindex/internal/db/postgres"
 )
 
+// InitSchema creates the starks module tables and indexes
 func InitSchema() error {
 	schema := `
-		CREATE TABLE IF NOT EXISTS stark_proofs (
-			id SERIAL PRIMARY KEY,
-			txid VARCHAR(64) NOT NULL,
-			block_height BIGINT NOT NULL,
-			proof_data BYTEA NOT NULL,
-			verification_key BYTEA,
-			public_inputs BYTEA,
-			verified BOOLEAN DEFAULT FALSE,
-			verification_time TIMESTAMP,
-			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+		-- Verifiers table
+		CREATE TABLE IF NOT EXISTS verifiers (
+			verifier_id VARCHAR(64) PRIMARY KEY,
+			verifier_name VARCHAR(255) NOT NULL,
+			verifier_metadata TEXT,
+			balance BIGINT NOT NULL DEFAULT 0,
+			first_seen_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 		);
 
+		-- STARK proofs table
+		CREATE TABLE IF NOT EXISTS stark_proofs (
+			verifier_id VARCHAR(64) NOT NULL,
+			txid VARCHAR(64) NOT NULL,
+			block_height BIGINT NOT NULL,
+			proof_size BIGINT NOT NULL,
+			PRIMARY KEY (verifier_id, txid),
+			FOREIGN KEY (verifier_id) REFERENCES verifiers(verifier_id) ON DELETE CASCADE
+		);
+
+		-- Ztarknet facts table
+		CREATE TABLE IF NOT EXISTS ztarknet_facts (
+			verifier_id VARCHAR(64) NOT NULL,
+			txid VARCHAR(64) NOT NULL,
+			block_height BIGINT NOT NULL,
+			proof_size BIGINT NOT NULL,
+			old_state VARCHAR(64) NOT NULL,
+			new_state VARCHAR(64) NOT NULL,
+			program_hash VARCHAR(64) NOT NULL,
+			inner_program_hash VARCHAR(64) NOT NULL,
+			PRIMARY KEY (verifier_id, txid),
+			FOREIGN KEY (verifier_id) REFERENCES verifiers(verifier_id) ON DELETE CASCADE
+		);
+
+		-- Indexes for verifiers
+		CREATE INDEX IF NOT EXISTS idx_verifiers_name ON verifiers(verifier_name);
+		CREATE INDEX IF NOT EXISTS idx_verifiers_first_seen ON verifiers(first_seen_at);
+		CREATE INDEX IF NOT EXISTS idx_verifiers_balance ON verifiers(balance);
+
+		-- Indexes for stark_proofs
 		CREATE INDEX IF NOT EXISTS idx_stark_proofs_txid ON stark_proofs(txid);
 		CREATE INDEX IF NOT EXISTS idx_stark_proofs_block_height ON stark_proofs(block_height);
-		CREATE INDEX IF NOT EXISTS idx_stark_proofs_verified ON stark_proofs(verified);
+		CREATE INDEX IF NOT EXISTS idx_stark_proofs_verifier ON stark_proofs(verifier_id);
+		CREATE INDEX IF NOT EXISTS idx_stark_proofs_size ON stark_proofs(proof_size);
+
+		-- Indexes for ztarknet_facts
+		CREATE INDEX IF NOT EXISTS idx_ztarknet_facts_txid ON ztarknet_facts(txid);
+		CREATE INDEX IF NOT EXISTS idx_ztarknet_facts_block_height ON ztarknet_facts(block_height);
+		CREATE INDEX IF NOT EXISTS idx_ztarknet_facts_verifier ON ztarknet_facts(verifier_id);
+		CREATE INDEX IF NOT EXISTS idx_ztarknet_facts_old_state ON ztarknet_facts(old_state);
+		CREATE INDEX IF NOT EXISTS idx_ztarknet_facts_new_state ON ztarknet_facts(new_state);
+		CREATE INDEX IF NOT EXISTS idx_ztarknet_facts_program_hash ON ztarknet_facts(program_hash);
 	`
 
 	_, err := postgres.DB.Exec(context.Background(), schema)
@@ -35,66 +72,340 @@ func InitSchema() error {
 	return nil
 }
 
-func GetProof(id int64) (*StarkProof, error) {
-	proof, err := postgres.PostgresQueryOne[StarkProof](
-		`SELECT id, txid, block_height, proof_data, verification_key, public_inputs, verified, verification_time, created_at
-		 FROM stark_proofs WHERE id = $1`,
-		id,
+// ============================================================================
+// Verifier Query Functions
+// ============================================================================
+
+// GetVerifier retrieves a verifier by its ID
+func GetVerifier(verifierID string) (*Verifier, error) {
+	verifier, err := postgres.PostgresQueryOne[Verifier](
+		`SELECT verifier_id, verifier_name, verifier_metadata, balance, first_seen_at
+		 FROM verifiers WHERE verifier_id = $1`,
+		verifierID,
 	)
 
 	if err == pgx.ErrNoRows {
 		return nil, nil
 	}
 	if err != nil {
-		return nil, fmt.Errorf("failed to get proof: %w", err)
+		return nil, fmt.Errorf("failed to get verifier: %w", err)
+	}
+
+	return verifier, nil
+}
+
+// GetVerifierByName retrieves a verifier by its name
+func GetVerifierByName(verifierName string) (*Verifier, error) {
+	verifier, err := postgres.PostgresQueryOne[Verifier](
+		`SELECT verifier_id, verifier_name, verifier_metadata, balance, first_seen_at
+		 FROM verifiers WHERE verifier_name = $1`,
+		verifierName,
+	)
+
+	if err == pgx.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("failed to get verifier by name: %w", err)
+	}
+
+	return verifier, nil
+}
+
+// GetAllVerifiers retrieves all verifiers with pagination
+func GetAllVerifiers(limit, offset int) ([]Verifier, error) {
+	verifiers, err := postgres.PostgresQuery[Verifier](
+		`SELECT verifier_id, verifier_name, verifier_metadata, balance, first_seen_at
+		 FROM verifiers
+		 ORDER BY first_seen_at DESC
+		 LIMIT $1 OFFSET $2`,
+		limit, offset,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get verifiers: %w", err)
+	}
+
+	return verifiers, nil
+}
+
+// GetVerifiersByBalance retrieves verifiers sorted by balance
+func GetVerifiersByBalance(limit, offset int) ([]Verifier, error) {
+	verifiers, err := postgres.PostgresQuery[Verifier](
+		`SELECT verifier_id, verifier_name, verifier_metadata, balance, first_seen_at
+		 FROM verifiers
+		 ORDER BY balance DESC
+		 LIMIT $1 OFFSET $2`,
+		limit, offset,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get verifiers by balance: %w", err)
+	}
+
+	return verifiers, nil
+}
+
+// ============================================================================
+// StarkProof Query Functions
+// ============================================================================
+
+// GetStarkProof retrieves a STARK proof by verifier ID and transaction ID
+func GetStarkProof(verifierID, txid string) (*StarkProof, error) {
+	proof, err := postgres.PostgresQueryOne[StarkProof](
+		`SELECT verifier_id, txid, block_height, proof_size
+		 FROM stark_proofs
+		 WHERE verifier_id = $1 AND txid = $2`,
+		verifierID, txid,
+	)
+
+	if err == pgx.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("failed to get stark proof: %w", err)
 	}
 
 	return proof, nil
 }
 
-func GetProofsByTransaction(txid string) ([]StarkProof, error) {
+// GetStarkProofsByVerifier retrieves all STARK proofs for a verifier
+func GetStarkProofsByVerifier(verifierID string, limit, offset int) ([]StarkProof, error) {
 	proofs, err := postgres.PostgresQuery[StarkProof](
-		`SELECT id, txid, block_height, proof_data, verification_key, public_inputs, verified, verification_time, created_at
-		 FROM stark_proofs WHERE txid = $1`,
+		`SELECT verifier_id, txid, block_height, proof_size
+		 FROM stark_proofs
+		 WHERE verifier_id = $1
+		 ORDER BY block_height DESC
+		 LIMIT $2 OFFSET $3`,
+		verifierID, limit, offset,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get stark proofs by verifier: %w", err)
+	}
+
+	return proofs, nil
+}
+
+// GetStarkProofsByTransaction retrieves all STARK proofs for a transaction
+func GetStarkProofsByTransaction(txid string) ([]StarkProof, error) {
+	proofs, err := postgres.PostgresQuery[StarkProof](
+		`SELECT verifier_id, txid, block_height, proof_size
+		 FROM stark_proofs
+		 WHERE txid = $1
+		 ORDER BY verifier_id`,
 		txid,
 	)
 	if err != nil {
-		return nil, fmt.Errorf("failed to query proofs: %w", err)
+		return nil, fmt.Errorf("failed to get stark proofs by transaction: %w", err)
 	}
 
 	return proofs, nil
 }
 
-func GetProofStats() (*ProofStats, error) {
-	stats, err := postgres.PostgresQueryOne[ProofStats](
-		`SELECT
-			COUNT(*) as total,
-			COUNT(*) FILTER (WHERE verified = TRUE) as verified,
-			COUNT(*) FILTER (WHERE verified = FALSE) as unverified
-		 FROM stark_proofs`,
-	)
-
-	if err != nil {
-		return nil, fmt.Errorf("failed to get proof stats: %w", err)
-	}
-
-	if stats.TotalProofs > 0 {
-		stats.VerificationRate = float64(stats.VerifiedProofs) / float64(stats.TotalProofs)
-	}
-
-	return stats, nil
-}
-
-func GetUnverifiedProofs(limit int) ([]StarkProof, error) {
+// GetStarkProofsByBlock retrieves all STARK proofs for a block
+func GetStarkProofsByBlock(blockHeight int64) ([]StarkProof, error) {
 	proofs, err := postgres.PostgresQuery[StarkProof](
-		`SELECT id, txid, block_height, proof_data, verification_key, public_inputs, verified, verification_time, created_at
-		 FROM stark_proofs WHERE verified = FALSE
-		 ORDER BY created_at ASC LIMIT $1`,
-		limit,
+		`SELECT verifier_id, txid, block_height, proof_size
+		 FROM stark_proofs
+		 WHERE block_height = $1
+		 ORDER BY txid`,
+		blockHeight,
 	)
 	if err != nil {
-		return nil, fmt.Errorf("failed to query unverified proofs: %w", err)
+		return nil, fmt.Errorf("failed to get stark proofs by block: %w", err)
 	}
 
 	return proofs, nil
+}
+
+// GetRecentStarkProofs retrieves the most recent STARK proofs
+func GetRecentStarkProofs(limit, offset int) ([]StarkProof, error) {
+	proofs, err := postgres.PostgresQuery[StarkProof](
+		`SELECT verifier_id, txid, block_height, proof_size
+		 FROM stark_proofs
+		 ORDER BY block_height DESC, txid
+		 LIMIT $1 OFFSET $2`,
+		limit, offset,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get recent stark proofs: %w", err)
+	}
+
+	return proofs, nil
+}
+
+// GetStarkProofsBySize retrieves STARK proofs filtered by size range
+func GetStarkProofsBySize(minSize, maxSize int64, limit, offset int) ([]StarkProof, error) {
+	proofs, err := postgres.PostgresQuery[StarkProof](
+		`SELECT verifier_id, txid, block_height, proof_size
+		 FROM stark_proofs
+		 WHERE proof_size >= $1 AND proof_size <= $2
+		 ORDER BY proof_size DESC
+		 LIMIT $3 OFFSET $4`,
+		minSize, maxSize, limit, offset,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get stark proofs by size: %w", err)
+	}
+
+	return proofs, nil
+}
+
+// ============================================================================
+// ZtarknetFacts Query Functions
+// ============================================================================
+
+// GetZtarknetFacts retrieves Ztarknet facts by verifier ID and transaction ID
+func GetZtarknetFacts(verifierID, txid string) (*ZtarknetFacts, error) {
+	facts, err := postgres.PostgresQueryOne[ZtarknetFacts](
+		`SELECT verifier_id, txid, block_height, proof_size, old_state, new_state,
+		        program_hash, inner_program_hash
+		 FROM ztarknet_facts
+		 WHERE verifier_id = $1 AND txid = $2`,
+		verifierID, txid,
+	)
+
+	if err == pgx.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("failed to get ztarknet facts: %w", err)
+	}
+
+	return facts, nil
+}
+
+// GetZtarknetFactsByVerifier retrieves all Ztarknet facts for a verifier
+func GetZtarknetFactsByVerifier(verifierID string, limit, offset int) ([]ZtarknetFacts, error) {
+	facts, err := postgres.PostgresQuery[ZtarknetFacts](
+		`SELECT verifier_id, txid, block_height, proof_size, old_state, new_state,
+		        program_hash, inner_program_hash
+		 FROM ztarknet_facts
+		 WHERE verifier_id = $1
+		 ORDER BY block_height DESC
+		 LIMIT $2 OFFSET $3`,
+		verifierID, limit, offset,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get ztarknet facts by verifier: %w", err)
+	}
+
+	return facts, nil
+}
+
+// GetZtarknetFactsByTransaction retrieves all Ztarknet facts for a transaction
+func GetZtarknetFactsByTransaction(txid string) ([]ZtarknetFacts, error) {
+	facts, err := postgres.PostgresQuery[ZtarknetFacts](
+		`SELECT verifier_id, txid, block_height, proof_size, old_state, new_state,
+		        program_hash, inner_program_hash
+		 FROM ztarknet_facts
+		 WHERE txid = $1
+		 ORDER BY verifier_id`,
+		txid,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get ztarknet facts by transaction: %w", err)
+	}
+
+	return facts, nil
+}
+
+// GetZtarknetFactsByBlock retrieves all Ztarknet facts for a block
+func GetZtarknetFactsByBlock(blockHeight int64) ([]ZtarknetFacts, error) {
+	facts, err := postgres.PostgresQuery[ZtarknetFacts](
+		`SELECT verifier_id, txid, block_height, proof_size, old_state, new_state,
+		        program_hash, inner_program_hash
+		 FROM ztarknet_facts
+		 WHERE block_height = $1
+		 ORDER BY txid`,
+		blockHeight,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get ztarknet facts by block: %w", err)
+	}
+
+	return facts, nil
+}
+
+// GetZtarknetFactsByState retrieves Ztarknet facts by state hash
+func GetZtarknetFactsByState(stateHash string) ([]ZtarknetFacts, error) {
+	facts, err := postgres.PostgresQuery[ZtarknetFacts](
+		`SELECT verifier_id, txid, block_height, proof_size, old_state, new_state,
+		        program_hash, inner_program_hash
+		 FROM ztarknet_facts
+		 WHERE old_state = $1 OR new_state = $1
+		 ORDER BY block_height DESC`,
+		stateHash,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get ztarknet facts by state: %w", err)
+	}
+
+	return facts, nil
+}
+
+// GetZtarknetFactsByProgramHash retrieves Ztarknet facts by program hash
+func GetZtarknetFactsByProgramHash(programHash string) ([]ZtarknetFacts, error) {
+	facts, err := postgres.PostgresQuery[ZtarknetFacts](
+		`SELECT verifier_id, txid, block_height, proof_size, old_state, new_state,
+		        program_hash, inner_program_hash
+		 FROM ztarknet_facts
+		 WHERE program_hash = $1
+		 ORDER BY block_height DESC`,
+		programHash,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get ztarknet facts by program hash: %w", err)
+	}
+
+	return facts, nil
+}
+
+// GetZtarknetFactsByInnerProgramHash retrieves Ztarknet facts by inner program hash
+func GetZtarknetFactsByInnerProgramHash(innerProgramHash string) ([]ZtarknetFacts, error) {
+	facts, err := postgres.PostgresQuery[ZtarknetFacts](
+		`SELECT verifier_id, txid, block_height, proof_size, old_state, new_state,
+		        program_hash, inner_program_hash
+		 FROM ztarknet_facts
+		 WHERE inner_program_hash = $1
+		 ORDER BY block_height DESC`,
+		innerProgramHash,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get ztarknet facts by inner program hash: %w", err)
+	}
+
+	return facts, nil
+}
+
+// GetRecentZtarknetFacts retrieves the most recent Ztarknet facts
+func GetRecentZtarknetFacts(limit, offset int) ([]ZtarknetFacts, error) {
+	facts, err := postgres.PostgresQuery[ZtarknetFacts](
+		`SELECT verifier_id, txid, block_height, proof_size, old_state, new_state,
+		        program_hash, inner_program_hash
+		 FROM ztarknet_facts
+		 ORDER BY block_height DESC, txid
+		 LIMIT $1 OFFSET $2`,
+		limit, offset,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get recent ztarknet facts: %w", err)
+	}
+
+	return facts, nil
+}
+
+// GetStateTransition retrieves the state transition from old_state to new_state
+func GetStateTransition(oldState, newState string) ([]ZtarknetFacts, error) {
+	facts, err := postgres.PostgresQuery[ZtarknetFacts](
+		`SELECT verifier_id, txid, block_height, proof_size, old_state, new_state,
+		        program_hash, inner_program_hash
+		 FROM ztarknet_facts
+		 WHERE old_state = $1 AND new_state = $2
+		 ORDER BY block_height DESC`,
+		oldState, newState,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get state transition: %w", err)
+	}
+
+	return facts, nil
 }
