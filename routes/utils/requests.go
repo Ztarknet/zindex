@@ -44,3 +44,27 @@ func ParseQueryParamInt(r *http.Request, param string, defaultValue int) int {
 
 	return intValue
 }
+
+// NormalizePagination validates and normalizes limit and offset parameters
+// Ensures limit is between 1 and maxLimit (default 100), and offset is non-negative
+func NormalizePagination(limit, offset int) (int, int) {
+	return NormalizePaginationWithMax(limit, offset, 100)
+}
+
+// NormalizePaginationWithMax validates and normalizes limit and offset with a custom max limit
+func NormalizePaginationWithMax(limit, offset, maxLimit int) (int, int) {
+	// Cap limit at maxLimit
+	if limit > maxLimit {
+		limit = maxLimit
+	}
+	if limit < 1 {
+		limit = 1
+	}
+
+	// Ensure offset is non-negative
+	if offset < 0 {
+		offset = 0
+	}
+
+	return limit, offset
+}
