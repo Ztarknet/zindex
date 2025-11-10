@@ -158,11 +158,11 @@ func GetAccountTransactionsByType(w http.ResponseWriter, r *http.Request) {
 
 	// Validate transaction type
 	validTypes := map[string]bool{
-		string(accounts.TxTypeIn):  true,
-		string(accounts.TxTypeOut): true,
+		string(accounts.TxTypeReceive): true,
+		string(accounts.TxTypeSend):    true,
 	}
 	if !validTypes[txType] {
-		utils.WriteErrorJson(w, http.StatusBadRequest, "Invalid transaction type. Must be one of: in, out")
+		utils.WriteErrorJson(w, http.StatusBadRequest, "Invalid transaction type. Must be one of: receive, send")
 		return
 	}
 
@@ -179,8 +179,8 @@ func GetAccountTransactionsByType(w http.ResponseWriter, r *http.Request) {
 	utils.WriteDataJson(w, txs)
 }
 
-// GetAccountIncomingTransactions retrieves incoming transactions for an account
-func GetAccountIncomingTransactions(w http.ResponseWriter, r *http.Request) {
+// GetAccountReceivingTransactions retrieves receiving transactions for an account
+func GetAccountReceivingTransactions(w http.ResponseWriter, r *http.Request) {
 	if !config.IsModuleEnabled("ACCOUNTS") {
 		utils.WriteErrorJson(w, http.StatusNotFound, "Accounts module is disabled")
 		return
@@ -196,7 +196,7 @@ func GetAccountIncomingTransactions(w http.ResponseWriter, r *http.Request) {
 	offset := utils.ParseQueryParamInt(r, "offset", 0)
 	limit, offset = utils.NormalizePagination(limit, offset)
 
-	txs, err := accounts.GetAccountIncomingTransactions(address, limit, offset)
+	txs, err := accounts.GetAccountReceivingTransactions(address, limit, offset)
 	if err != nil {
 		utils.WriteErrorJson(w, http.StatusInternalServerError, err.Error())
 		return
@@ -205,8 +205,8 @@ func GetAccountIncomingTransactions(w http.ResponseWriter, r *http.Request) {
 	utils.WriteDataJson(w, txs)
 }
 
-// GetAccountOutgoingTransactions retrieves outgoing transactions for an account
-func GetAccountOutgoingTransactions(w http.ResponseWriter, r *http.Request) {
+// GetAccountSendingTransactions retrieves sending transactions for an account
+func GetAccountSendingTransactions(w http.ResponseWriter, r *http.Request) {
 	if !config.IsModuleEnabled("ACCOUNTS") {
 		utils.WriteErrorJson(w, http.StatusNotFound, "Accounts module is disabled")
 		return
@@ -222,7 +222,7 @@ func GetAccountOutgoingTransactions(w http.ResponseWriter, r *http.Request) {
 	offset := utils.ParseQueryParamInt(r, "offset", 0)
 	limit, offset = utils.NormalizePagination(limit, offset)
 
-	txs, err := accounts.GetAccountOutgoingTransactions(address, limit, offset)
+	txs, err := accounts.GetAccountSendingTransactions(address, limit, offset)
 	if err != nil {
 		utils.WriteErrorJson(w, http.StatusInternalServerError, err.Error())
 		return

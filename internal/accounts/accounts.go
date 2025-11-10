@@ -5,8 +5,17 @@ import (
 	"fmt"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/keep-starknet-strange/ztarknet/zindex/internal/db/postgres"
 )
+
+// DBTX is an interface that both pgxpool.Pool and pgx.Tx implement
+// This allows functions to work with either a connection pool or a transaction
+type DBTX interface {
+	Exec(ctx context.Context, sql string, arguments ...interface{}) (pgconn.CommandTag, error)
+	Query(ctx context.Context, sql string, args ...interface{}) (pgx.Rows, error)
+	QueryRow(ctx context.Context, sql string, args ...interface{}) pgx.Row
+}
 
 func init() {
 	// Register this module's schema initialization with the postgres package
@@ -154,14 +163,14 @@ func GetAccountTransactionsByType(address string, txType string, limit, offset i
 	return txs, nil
 }
 
-// GetAccountIncomingTransactions retrieves incoming transactions for an account
-func GetAccountIncomingTransactions(address string, limit, offset int) ([]AccountTransaction, error) {
-	return GetAccountTransactionsByType(address, string(TxTypeIn), limit, offset)
+// GetAccountReceivingTransactions retrieves receiving transactions for an account
+func GetAccountReceivingTransactions(address string, limit, offset int) ([]AccountTransaction, error) {
+	return GetAccountTransactionsByType(address, string(TxTypeReceive), limit, offset)
 }
 
-// GetAccountOutgoingTransactions retrieves outgoing transactions for an account
-func GetAccountOutgoingTransactions(address string, limit, offset int) ([]AccountTransaction, error) {
-	return GetAccountTransactionsByType(address, string(TxTypeOut), limit, offset)
+// GetAccountSendingTransactions retrieves sending transactions for an account
+func GetAccountSendingTransactions(address string, limit, offset int) ([]AccountTransaction, error) {
+	return GetAccountTransactionsByType(address, string(TxTypeSend), limit, offset)
 }
 
 // GetAccountTransactionsByBlockRange retrieves transactions for an account within a block range
@@ -236,11 +245,14 @@ func GetTransactionAccounts(txid string) ([]AccountTransaction, error) {
 // GetRecentActiveAccounts retrieves accounts with recent transaction activity
 func GetRecentActiveAccounts(limit int) ([]Account, error) {
 	accounts, err := postgres.PostgresQuery[Account](
-		`SELECT DISTINCT a.address, a.balance, a.first_seen_at
+		`SELECT a.address, a.balance, a.first_seen_at
 		 FROM accounts a
-		 INNER JOIN account_transactions at ON a.address = at.address
-		 ORDER BY at.block_height DESC
-		 LIMIT $1`,
+		 WHERE a.address IN (
+			SELECT DISTINCT address
+			FROM account_transactions
+			ORDER BY block_height DESC
+			LIMIT $1
+		 )`,
 		limit,
 	)
 	if err != nil {
@@ -248,4 +260,29 @@ func GetRecentActiveAccounts(limit int) ([]Account, error) {
 	}
 
 	return accounts, nil
+}
+
+// StoreAccountTransaction inserts or updates an account transaction in the database
+// If postgresTx is provided, it will be used; otherwise a standalone query is executed
+func StoreAccountTransaction(postgresTx DBTX, address string, txid string, blockHeight int64, txType string) error {
+	ctx := context.Background()
+
+	query := `
+		INSERT INTO account_transactions (address, txid, block_height, type)
+		VALUES ($1, $2, $3, $4)
+		ON CONFLICT (address, txid) DO UPDATE SET
+			block_height = EXCLUDED.block_height,
+			type = EXCLUDED.type
+	`
+
+	if postgresTx == nil {
+		postgresTx = postgres.DB
+	}
+
+	_, err := postgresTx.Exec(ctx, query, address, txid, blockHeight, txType)
+	if err != nil {
+		return fmt.Errorf("failed to store account transaction %s for address %s: %w", txid, address, err)
+	}
+
+	return nil
 }

@@ -87,8 +87,8 @@ func EnableAccountsRoutes(mux *http.ServeMux) {
 	// Account transaction routes
 	mux.HandleFunc("/api/v1/accounts/transactions", GetAccountTransactions)
 	mux.HandleFunc("/api/v1/accounts/transactions/type", GetAccountTransactionsByType)
-	mux.HandleFunc("/api/v1/accounts/transactions/incoming", GetAccountIncomingTransactions)
-	mux.HandleFunc("/api/v1/accounts/transactions/outgoing", GetAccountOutgoingTransactions)
+	mux.HandleFunc("/api/v1/accounts/transactions/receiving", GetAccountReceivingTransactions)
+	mux.HandleFunc("/api/v1/accounts/transactions/sending", GetAccountSendingTransactions)
 	mux.HandleFunc("/api/v1/accounts/transactions/block-range", GetAccountTransactionsByBlockRange)
 	mux.HandleFunc("/api/v1/accounts/transactions/count", GetAccountTransactionCount)
 	mux.HandleFunc("/api/v1/accounts/transactions/transaction", GetAccountTransaction)

@@ -14,13 +14,13 @@ type AccountTransaction struct {
 	Address     string `json:"address" db:"address"`
 	TxID        string `json:"txid" db:"txid"`
 	BlockHeight int64  `json:"block_height" db:"block_height"`
-	Type        string `json:"type" db:"type"` // in, out
+	Type        string `json:"type" db:"type"` // receive, send
 }
 
 // AccountTransactionType represents the direction of a transaction relative to an account
 type AccountTransactionType string
 
 const (
-	TxTypeIn  AccountTransactionType = "in"  // incoming transaction
-	TxTypeOut AccountTransactionType = "out" // outgoing transaction
+	TxTypeReceive AccountTransactionType = "receive" // receiving transaction (funds coming in)
+	TxTypeSend    AccountTransactionType = "send"    // sending transaction (funds going out)
 )
