@@ -20,9 +20,17 @@ type SchemaInitFunc func() error
 // registeredModuleSchemas holds the schema initialization functions for enabled modules
 var registeredModuleSchemas = make(map[string]SchemaInitFunc)
 
+// registeredCoreSchemas holds the schema initialization functions for core schemas (always enabled)
+var registeredCoreSchemas = make(map[string]SchemaInitFunc)
+
 // RegisterModuleSchema registers a module's schema initialization function
 func RegisterModuleSchema(moduleName string, initFunc SchemaInitFunc) {
 	registeredModuleSchemas[moduleName] = initFunc
+}
+
+// RegisterCoreSchema registers a core schema initialization function (always initialized)
+func RegisterCoreSchema(name string, initFunc SchemaInitFunc) {
+	registeredCoreSchemas[name] = initFunc
 }
 
 func InitPostgres() error {
@@ -100,22 +108,6 @@ func initSchema() error {
 			last_indexed_hash VARCHAR(64),
 			updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 		);
-
-		CREATE TABLE IF NOT EXISTS blocks (
-			height BIGINT PRIMARY KEY,
-			hash VARCHAR(64) NOT NULL UNIQUE,
-			prev_hash VARCHAR(64),
-			merkle_root VARCHAR(64),
-			timestamp BIGINT,
-			difficulty VARCHAR(64),
-			nonce VARCHAR(64),
-			version INT,
-			tx_count INT DEFAULT 0,
-			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-		);
-
-		CREATE INDEX IF NOT EXISTS idx_blocks_hash ON blocks(hash);
-		CREATE INDEX IF NOT EXISTS idx_blocks_timestamp ON blocks(timestamp);
 	`
 
 	_, err := DB.Exec(context.Background(), coreSchema)
@@ -139,9 +131,27 @@ func initSchema() error {
 
 	log.Println("Core schema initialized successfully")
 
+	// Initialize core schemas (always initialized)
+	if err := initCoreSchemas(); err != nil {
+		return fmt.Errorf("failed to initialize core schemas: %w", err)
+	}
+
 	// Initialize module schemas based on configuration
 	if err := initModuleSchemas(); err != nil {
 		return fmt.Errorf("failed to initialize module schemas: %w", err)
+	}
+
+	return nil
+}
+
+func initCoreSchemas() error {
+	// Initialize registered core schemas (always enabled)
+	for name, initFunc := range registeredCoreSchemas {
+		log.Printf("Initializing %s schema...", name)
+		if err := initFunc(); err != nil {
+			return fmt.Errorf("failed to initialize %s schema: %w", name, err)
+		}
+		log.Printf("%s schema initialized successfully", name)
 	}
 
 	return nil
@@ -187,58 +197,6 @@ func UpdateLastIndexedBlock(height int64, hash string) error {
 	if err != nil {
 		return fmt.Errorf("failed to update last indexed block: %w", err)
 	}
-	return nil
-}
-
-// StoreBlock inserts or updates a block in the database
-func StoreBlock(height int64, hash string, prevHash string, block map[string]interface{}) error {
-	ctx := context.Background()
-
-	// Extract block fields
-	var merkleRoot, difficulty, nonce string
-	var timestamp int64
-	var version, txCount int
-
-	if val, ok := block["merkleroot"].(string); ok {
-		merkleRoot = val
-	}
-	if val, ok := block["difficulty"].(float64); ok {
-		difficulty = fmt.Sprintf("%f", val)
-	} else if val, ok := block["difficulty"].(string); ok {
-		difficulty = val
-	}
-	if val, ok := block["nonce"].(string); ok {
-		nonce = val
-	}
-	if val, ok := block["time"].(float64); ok {
-		timestamp = int64(val)
-	}
-	if val, ok := block["version"].(float64); ok {
-		version = int(val)
-	}
-	if tx, ok := block["tx"].([]interface{}); ok {
-		txCount = len(tx)
-	}
-
-	query := `
-		INSERT INTO blocks (height, hash, prev_hash, merkle_root, timestamp, difficulty, nonce, version, tx_count)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-		ON CONFLICT (height) DO UPDATE SET
-			hash = EXCLUDED.hash,
-			prev_hash = EXCLUDED.prev_hash,
-			merkle_root = EXCLUDED.merkle_root,
-			timestamp = EXCLUDED.timestamp,
-			difficulty = EXCLUDED.difficulty,
-			nonce = EXCLUDED.nonce,
-			version = EXCLUDED.version,
-			tx_count = EXCLUDED.tx_count
-	`
-
-	_, err := DB.Exec(ctx, query, height, hash, prevHash, merkleRoot, timestamp, difficulty, nonce, version, txCount)
-	if err != nil {
-		return fmt.Errorf("failed to store block %d: %w", height, err)
-	}
-
 	return nil
 }
 

@@ -16,6 +16,9 @@ func StartServer(host, port string) {
 	// Enable base routes (always enabled)
 	EnableBaseRoutes(mux)
 
+	// Enable block routes (always enabled)
+	EnableBlockRoutes(mux)
+
 	// Enable module-specific routes based on configuration
 	EnableAccountsRoutes(mux)
 	EnableTxGraphRoutes(mux)
@@ -186,4 +189,19 @@ func EnableStarksRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/v1/starks/facts/by-inner-program-hash", GetZtarknetFactsByInnerProgramHash)
 	mux.HandleFunc("/api/v1/starks/facts/recent", GetRecentZtarknetFacts)
 	mux.HandleFunc("/api/v1/starks/facts/state-transition", GetStateTransition)
+}
+
+// EnableBlockRoutes registers all block routes (always enabled)
+func EnableBlockRoutes(mux *http.ServeMux) {
+	log.Println("Registering Block routes")
+
+	// Block routes
+	mux.HandleFunc("/api/v1/blocks", GetBlocks)
+	mux.HandleFunc("/api/v1/blocks/block", GetBlock)
+	mux.HandleFunc("/api/v1/blocks/by-hash", GetBlockByHash)
+	mux.HandleFunc("/api/v1/blocks/range", GetBlocksByRange)
+	mux.HandleFunc("/api/v1/blocks/timestamp-range", GetBlocksByTimestampRange)
+	mux.HandleFunc("/api/v1/blocks/recent", GetRecentBlocks)
+	mux.HandleFunc("/api/v1/blocks/count", GetBlockCount)
+	mux.HandleFunc("/api/v1/blocks/latest", GetLatestBlock)
 }

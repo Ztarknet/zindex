@@ -12,6 +12,9 @@ import (
 	"github.com/keep-starknet-strange/ztarknet/zindex/internal/provider"
 	"github.com/keep-starknet-strange/ztarknet/zindex/routes"
 
+	// Import core schemas to register their initialization functions
+	_ "github.com/keep-starknet-strange/ztarknet/zindex/internal/blocks"
+
 	// Import modules to register their schema initialization functions
 	_ "github.com/keep-starknet-strange/ztarknet/zindex/internal/accounts"
 	_ "github.com/keep-starknet-strange/ztarknet/zindex/internal/starks"

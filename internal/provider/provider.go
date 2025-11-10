@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/keep-starknet-strange/ztarknet/zindex/internal/blocks"
 	"github.com/keep-starknet-strange/ztarknet/zindex/internal/config"
 	"github.com/keep-starknet-strange/ztarknet/zindex/internal/db/postgres"
 )
@@ -151,7 +152,7 @@ func indexBlock(height int64) error {
 	}
 
 	// Store block data
-	if err := postgres.StoreBlock(height, blockHash, prevHash, block); err != nil {
+	if err := blocks.StoreBlock(height, blockHash, prevHash, block); err != nil {
 		return fmt.Errorf("failed to store block: %w", err)
 	}
 
