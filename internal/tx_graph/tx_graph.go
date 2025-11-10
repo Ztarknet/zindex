@@ -5,8 +5,17 @@ import (
 	"fmt"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/keep-starknet-strange/ztarknet/zindex/internal/db/postgres"
 )
+
+// DBTX is an interface that both pgxpool.Pool and pgx.Tx implement
+// This allows functions to work with either a connection pool or a transaction
+type DBTX interface {
+	Exec(ctx context.Context, sql string, arguments ...interface{}) (pgconn.CommandTag, error)
+	Query(ctx context.Context, sql string, args ...interface{}) (pgx.Rows, error)
+	QueryRow(ctx context.Context, sql string, args ...interface{}) pgx.Row
+}
 
 func init() {
 	// Register this module's schema initialization with the postgres package
@@ -308,4 +317,102 @@ func GetTransactionGraph(txid string, depth int) ([]string, error) {
 	}
 
 	return txids, nil
+}
+
+// StoreTransaction inserts or updates a transaction in the database
+// If tx is provided, it will be used; otherwise a standalone query is executed
+func StoreTransaction(tx DBTX, txid string, blockHeight int64, blockHash string, version int, locktime int64, txType string, totalOutput int64, totalFee int64, size int) error {
+	ctx := context.Background()
+
+	query := `
+		INSERT INTO transactions (txid, block_height, block_hash, version, locktime, type, total_output, total_fee, size)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+		ON CONFLICT (txid) DO UPDATE SET
+			block_height = EXCLUDED.block_height,
+			block_hash = EXCLUDED.block_hash,
+			version = EXCLUDED.version,
+			locktime = EXCLUDED.locktime,
+			type = EXCLUDED.type,
+			total_output = EXCLUDED.total_output,
+			total_fee = EXCLUDED.total_fee,
+			size = EXCLUDED.size
+	`
+
+	if tx == nil {
+		tx = postgres.DB
+	}
+
+	_, err := tx.Exec(ctx, query, txid, blockHeight, blockHash, version, locktime, txType, totalOutput, totalFee, size)
+	if err != nil {
+		return fmt.Errorf("failed to store transaction %s: %w", txid, err)
+	}
+
+	return nil
+}
+
+// StoreTransactionOutput inserts or updates a transaction output in the database
+// If tx is provided, it will be used; otherwise a standalone query is executed
+func StoreTransactionOutput(tx DBTX, txid string, vout int, value int64) error {
+	ctx := context.Background()
+
+	query := `
+		INSERT INTO transaction_outputs (txid, vout, value)
+		VALUES ($1, $2, $3)
+		ON CONFLICT (txid, vout) DO UPDATE SET
+			value = EXCLUDED.value
+	`
+
+	if tx == nil {
+		tx = postgres.DB
+	}
+
+	_, err := tx.Exec(ctx, query, txid, vout, value)
+	if err != nil {
+		return fmt.Errorf("failed to store transaction output %s:%d: %w", txid, vout, err)
+	}
+
+	return nil
+}
+
+// StoreTransactionInput inserts or updates a transaction input in the database
+// and marks the corresponding output as spent
+// If tx is provided, it will be used; otherwise a standalone query is executed
+func StoreTransactionInput(tx DBTX, txid string, vin int, value int64, prevTxid string, prevVout int, sequence int64, blockHeight int64) error {
+	ctx := context.Background()
+
+	if tx == nil {
+		tx = postgres.DB
+	}
+
+	// Insert the input
+	inputQuery := `
+		INSERT INTO transaction_inputs (txid, vin, value, prev_txid, prev_vout, sequence)
+		VALUES ($1, $2, $3, $4, $5, $6)
+		ON CONFLICT (txid, vin) DO UPDATE SET
+			value = EXCLUDED.value,
+			prev_txid = EXCLUDED.prev_txid,
+			prev_vout = EXCLUDED.prev_vout,
+			sequence = EXCLUDED.sequence
+	`
+
+	_, err := tx.Exec(ctx, inputQuery, txid, vin, value, prevTxid, prevVout, sequence)
+	if err != nil {
+		return fmt.Errorf("failed to store transaction input %s:%d: %w", txid, vin, err)
+	}
+
+	// Mark the previous output as spent
+	outputQuery := `
+		UPDATE transaction_outputs
+		SET spent_by_txid = $1,
+		    spent_by_vin = $2,
+		    spent_at_height = $3
+		WHERE txid = $4 AND vout = $5
+	`
+
+	_, err = tx.Exec(ctx, outputQuery, txid, vin, blockHeight, prevTxid, prevVout)
+	if err != nil {
+		return fmt.Errorf("failed to mark output %s:%d as spent: %w", prevTxid, prevVout, err)
+	}
+
+	return nil
 }

@@ -198,9 +198,25 @@ type OrchardAction struct {
 }
 
 // IsTZETransaction checks if a transaction is a TZE transaction
-// TZE transactions are identified by version 65535 (0xFFFF) and versiongroupid "ffffffff"
+// TZE transactions are identified by scriptSig or scriptPubKey hex starting with "ff"
 func (tx *ZcashTransaction) IsTZETransaction() bool {
-	return tx.Version == 65535 && tx.VersionGroupID == "ffffffff"
+	// Check inputs for TZE (scriptSig hex starts with "ff")
+	for _, vin := range tx.Vin {
+		if vin.ScriptSig != nil && len(vin.ScriptSig.Hex) >= 2 &&
+			vin.ScriptSig.Hex[:2] == "ff" {
+			return true
+		}
+	}
+
+	// Check outputs for TZE (scriptPubKey hex starts with "ff")
+	for _, vout := range tx.Vout {
+		if vout.ScriptPubKey != nil && len(vout.ScriptPubKey.Hex) >= 2 &&
+			vout.ScriptPubKey.Hex[:2] == "ff" {
+			return true
+		}
+	}
+
+	return false
 }
 
 // IsCoinbase checks if a transaction is a coinbase transaction
