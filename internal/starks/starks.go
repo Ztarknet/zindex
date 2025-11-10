@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/keep-starknet-strange/ztarknet/zindex/internal/config"
 	"github.com/keep-starknet-strange/ztarknet/zindex/internal/db/postgres"
 )
@@ -19,7 +20,7 @@ func InitSchema() error {
 	schema := `
 		-- Verifiers table
 		CREATE TABLE IF NOT EXISTS verifiers (
-			verifier_id VARCHAR(64) PRIMARY KEY,
+			verifier_id VARCHAR(80) PRIMARY KEY,  -- txid (64) + ":" (1) + vout (up to 10 digits)
 			verifier_name VARCHAR(255) NOT NULL,
 			verifier_metadata TEXT,
 			balance BIGINT NOT NULL DEFAULT 0,
@@ -28,7 +29,7 @@ func InitSchema() error {
 
 		-- STARK proofs table
 		CREATE TABLE IF NOT EXISTS stark_proofs (
-			verifier_id VARCHAR(64) NOT NULL,
+			verifier_id VARCHAR(80) NOT NULL,  -- matches verifiers.verifier_id
 			txid VARCHAR(64) NOT NULL,
 			block_height BIGINT NOT NULL,
 			proof_size BIGINT NOT NULL,
@@ -38,7 +39,7 @@ func InitSchema() error {
 
 		-- Ztarknet facts table
 		CREATE TABLE IF NOT EXISTS ztarknet_facts (
-			verifier_id VARCHAR(64) NOT NULL,
+			verifier_id VARCHAR(80) NOT NULL,  -- matches verifiers.verifier_id
 			txid VARCHAR(64) NOT NULL,
 			block_height BIGINT NOT NULL,
 			proof_size BIGINT NOT NULL,
@@ -419,4 +420,122 @@ func GetStateTransition(oldState, newState string) ([]ZtarknetFacts, error) {
 	}
 
 	return facts, nil
+}
+
+// ============================================================================
+// STORAGE FUNCTIONS
+// ============================================================================
+
+// DBTX is an interface that both pgxpool.Pool and pgx.Tx implement
+// This allows functions to work with either a connection pool or a transaction
+type DBTX interface {
+	Exec(ctx context.Context, sql string, arguments ...interface{}) (pgconn.CommandTag, error)
+	Query(ctx context.Context, sql string, args ...interface{}) (pgx.Rows, error)
+	QueryRow(ctx context.Context, sql string, args ...interface{}) pgx.Row
+}
+
+// StoreVerifier inserts or updates a verifier in the database
+// If postgresTx is provided, it will be used; otherwise a standalone query is executed
+func StoreVerifier(postgresTx DBTX, verifierID, verifierName, verifierMetadata string, balance int64) error {
+	ctx := context.Background()
+
+	query := `
+		INSERT INTO verifiers (verifier_id, verifier_name, verifier_metadata, balance)
+		VALUES ($1, $2, $3, $4)
+		ON CONFLICT (verifier_id) DO UPDATE SET
+			verifier_name = EXCLUDED.verifier_name,
+			verifier_metadata = EXCLUDED.verifier_metadata,
+			balance = EXCLUDED.balance
+	`
+
+	if postgresTx == nil {
+		postgresTx = postgres.DB
+	}
+
+	_, err := postgresTx.Exec(ctx, query, verifierID, verifierName, verifierMetadata, balance)
+	if err != nil {
+		return fmt.Errorf("failed to store verifier %s: %w", verifierID, err)
+	}
+
+	return nil
+}
+
+// UpdateVerifierBalance updates the balance of an existing verifier
+// If postgresTx is provided, it will be used; otherwise a standalone query is executed
+func UpdateVerifierBalance(postgresTx DBTX, verifierID string, balance int64) error {
+	ctx := context.Background()
+
+	query := `
+		UPDATE verifiers
+		SET balance = $2
+		WHERE verifier_id = $1
+	`
+
+	if postgresTx == nil {
+		postgresTx = postgres.DB
+	}
+
+	_, err := postgresTx.Exec(ctx, query, verifierID, balance)
+	if err != nil {
+		return fmt.Errorf("failed to update verifier %s balance: %w", verifierID, err)
+	}
+
+	return nil
+}
+
+// StoreStarkProof inserts or updates a STARK proof in the database
+// If postgresTx is provided, it will be used; otherwise a standalone query is executed
+func StoreStarkProof(postgresTx DBTX, verifierID, txid string, blockHeight, proofSize int64) error {
+	ctx := context.Background()
+
+	query := `
+		INSERT INTO stark_proofs (verifier_id, txid, block_height, proof_size)
+		VALUES ($1, $2, $3, $4)
+		ON CONFLICT (verifier_id, txid) DO UPDATE SET
+			block_height = EXCLUDED.block_height,
+			proof_size = EXCLUDED.proof_size
+	`
+
+	if postgresTx == nil {
+		postgresTx = postgres.DB
+	}
+
+	_, err := postgresTx.Exec(ctx, query, verifierID, txid, blockHeight, proofSize)
+	if err != nil {
+		return fmt.Errorf("failed to store STARK proof for verifier %s, tx %s: %w", verifierID, txid, err)
+	}
+
+	return nil
+}
+
+// StoreZtarknetFacts inserts or updates Ztarknet facts in the database
+// If postgresTx is provided, it will be used; otherwise a standalone query is executed
+func StoreZtarknetFacts(postgresTx DBTX, verifierID, txid string, blockHeight, proofSize int64,
+	oldState, newState, programHash, innerProgramHash string) error {
+	ctx := context.Background()
+
+	query := `
+		INSERT INTO ztarknet_facts (verifier_id, txid, block_height, proof_size,
+		                            old_state, new_state, program_hash, inner_program_hash)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+		ON CONFLICT (verifier_id, txid) DO UPDATE SET
+			block_height = EXCLUDED.block_height,
+			proof_size = EXCLUDED.proof_size,
+			old_state = EXCLUDED.old_state,
+			new_state = EXCLUDED.new_state,
+			program_hash = EXCLUDED.program_hash,
+			inner_program_hash = EXCLUDED.inner_program_hash
+	`
+
+	if postgresTx == nil {
+		postgresTx = postgres.DB
+	}
+
+	_, err := postgresTx.Exec(ctx, query, verifierID, txid, blockHeight, proofSize,
+		oldState, newState, programHash, innerProgramHash)
+	if err != nil {
+		return fmt.Errorf("failed to store Ztarknet facts for verifier %s, tx %s: %w", verifierID, txid, err)
+	}
+
+	return nil
 }

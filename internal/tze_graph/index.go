@@ -176,7 +176,7 @@ func indexTzeInput(postgresTx DBTX, txid string, vin int, input *types.Vin, bloc
 		return fmt.Errorf("failed to decode scriptSig hex: %w", err)
 	}
 
-	// Parse TZE fields (witness data is parsed but not currently stored)
+	// Parse TZE fields
 	tzeType, tzeMode, _, err := parseTzeData(scriptBytes)
 	if err != nil {
 		return fmt.Errorf("failed to parse TZE input data: %w", err)
