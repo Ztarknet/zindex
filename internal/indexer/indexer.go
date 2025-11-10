@@ -12,6 +12,7 @@ import (
 	"github.com/keep-starknet-strange/ztarknet/zindex/internal/db/postgres"
 	"github.com/keep-starknet-strange/ztarknet/zindex/internal/starks"
 	"github.com/keep-starknet-strange/ztarknet/zindex/internal/tx_graph"
+	"github.com/keep-starknet-strange/ztarknet/zindex/internal/types"
 	"github.com/keep-starknet-strange/ztarknet/zindex/internal/tze_graph"
 )
 
@@ -30,6 +31,8 @@ var (
 // IndexBlock fetches and indexes a single block at the specified height
 // This is the main entry point for indexing a block and coordinates all module indexing
 func IndexBlock(height int64, rpcClient RpcClient) error {
+	log.Printf("Indexing block at height %d", height)
+
 	// Fetch block hash
 	blockHash, err := rpcClient.GetBlockHash(height)
 	if err != nil {
@@ -77,7 +80,7 @@ func IndexBlock(height int64, rpcClient RpcClient) error {
 }
 
 // parseBlock converts the raw RPC response map into a strongly-typed ZcashBlock structure
-func parseBlock(rawBlock map[string]interface{}) (*ZcashBlock, error) {
+func parseBlock(rawBlock map[string]interface{}) (*types.ZcashBlock, error) {
 	// Marshal the map back to JSON
 	jsonData, err := json.Marshal(rawBlock)
 	if err != nil {
@@ -85,7 +88,7 @@ func parseBlock(rawBlock map[string]interface{}) (*ZcashBlock, error) {
 	}
 
 	// Unmarshal into our ZcashBlock type
-	var block ZcashBlock
+	var block types.ZcashBlock
 	if err := json.Unmarshal(jsonData, &block); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal block data: %w", err)
 	}
@@ -95,7 +98,7 @@ func parseBlock(rawBlock map[string]interface{}) (*ZcashBlock, error) {
 
 // indexModules calls the indexing function for each enabled module
 // This function orchestrates the indexing across all modules
-func indexModules(block *ZcashBlock) error {
+func indexModules(block *types.ZcashBlock) error {
 	// Always index blocks (core module)
 	if err := blocks.IndexBlocks(block); err != nil {
 		return fmt.Errorf("failed to index blocks module: %w", err)

@@ -4,15 +4,12 @@ import (
 	"log"
 
 	"github.com/keep-starknet-strange/ztarknet/zindex/internal/config"
+	"github.com/keep-starknet-strange/ztarknet/zindex/internal/types"
 )
-
-// ZcashBlock is a forward declaration to avoid import cycles
-// The actual type is defined in internal/indexer/types.go
-type ZcashBlock interface{}
 
 // IndexTxGraph indexes transaction graph data from a Zcash block
 // This function builds the UTXO graph by tracking transaction inputs and outputs
-func IndexTxGraph(block ZcashBlock) error {
+func IndexTxGraph(block *types.ZcashBlock) error {
 	// Check if tx_graph module is enabled
 	if !config.IsModuleEnabled("TX_GRAPH") {
 		return nil

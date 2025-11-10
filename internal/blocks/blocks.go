@@ -43,34 +43,11 @@ func InitSchema() error {
 }
 
 // StoreBlock inserts or updates a block in the database
-func StoreBlock(height int64, hash string, prevHash string, block map[string]interface{}) error {
+func StoreBlock(height int64, hash string, prevHash string, merkleRoot string, timestamp int64, difficulty float64, nonce string, version int, txCount int) error {
 	ctx := context.Background()
 
-	// Extract block fields
-	var merkleRoot, difficulty, nonce string
-	var timestamp int64
-	var version, txCount int
-
-	if val, ok := block["merkleroot"].(string); ok {
-		merkleRoot = val
-	}
-	if val, ok := block["difficulty"].(float64); ok {
-		difficulty = fmt.Sprintf("%f", val)
-	} else if val, ok := block["difficulty"].(string); ok {
-		difficulty = val
-	}
-	if val, ok := block["nonce"].(string); ok {
-		nonce = val
-	}
-	if val, ok := block["time"].(float64); ok {
-		timestamp = int64(val)
-	}
-	if val, ok := block["version"].(float64); ok {
-		version = int(val)
-	}
-	if tx, ok := block["tx"].([]interface{}); ok {
-		txCount = len(tx)
-	}
+	// Convert difficulty to string for storage
+	difficultyStr := fmt.Sprintf("%f", difficulty)
 
 	query := `
 		INSERT INTO blocks (height, hash, prev_hash, merkle_root, timestamp, difficulty, nonce, version, tx_count)
@@ -86,7 +63,7 @@ func StoreBlock(height int64, hash string, prevHash string, block map[string]int
 			tx_count = EXCLUDED.tx_count
 	`
 
-	_, err := postgres.DB.Exec(ctx, query, height, hash, prevHash, merkleRoot, timestamp, difficulty, nonce, version, txCount)
+	_, err := postgres.DB.Exec(ctx, query, height, hash, prevHash, merkleRoot, timestamp, difficultyStr, nonce, version, txCount)
 	if err != nil {
 		return fmt.Errorf("failed to store block %d: %w", height, err)
 	}

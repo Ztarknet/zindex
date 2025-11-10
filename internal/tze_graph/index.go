@@ -4,15 +4,12 @@ import (
 	"log"
 
 	"github.com/keep-starknet-strange/ztarknet/zindex/internal/config"
+	"github.com/keep-starknet-strange/ztarknet/zindex/internal/types"
 )
-
-// ZcashBlock is a forward declaration to avoid import cycles
-// The actual type is defined in internal/indexer/types.go
-type ZcashBlock interface{}
 
 // IndexTzeGraph indexes TZE (Transparent Zcash Extension) graph data from a Zcash block
 // This function tracks TZE inputs, outputs, and their relationships
-func IndexTzeGraph(block ZcashBlock) error {
+func IndexTzeGraph(block *types.ZcashBlock) error {
 	// Check if tze_graph module is enabled
 	if !config.IsModuleEnabled("TZE_GRAPH") {
 		return nil

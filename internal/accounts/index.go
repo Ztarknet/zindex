@@ -4,15 +4,12 @@ import (
 	"log"
 
 	"github.com/keep-starknet-strange/ztarknet/zindex/internal/config"
+	"github.com/keep-starknet-strange/ztarknet/zindex/internal/types"
 )
-
-// ZcashBlock is a forward declaration to avoid import cycles
-// The actual type is defined in internal/indexer/types.go
-type ZcashBlock interface{}
 
 // IndexAccounts indexes account-related data from a Zcash block
 // This function extracts and stores account balances, transactions, and related data
-func IndexAccounts(block ZcashBlock) error {
+func IndexAccounts(block *types.ZcashBlock) error {
 	// Check if accounts module is enabled
 	if !config.IsModuleEnabled("ACCOUNTS") {
 		return nil
