@@ -7,8 +7,8 @@ type TzeInput struct {
 	Value    int64  `json:"value" db:"value"`
 	PrevTxID string `json:"prev_txid" db:"prev_txid"`
 	PrevVout int    `json:"prev_vout" db:"prev_vout"`
-	TzeType  int16  `json:"tze_type" db:"tze_type"` // 0=demo, 1=stark_verify
-	TzeMode  int16  `json:"tze_mode" db:"tze_mode"` // demo: 0=open, 1=close; stark_verify: 0=initialize, 1=verify
+	TzeType  int32  `json:"tze_type" db:"tze_type"` // 4-byte extension_id (0=demo, 1=stark_verify)
+	TzeMode  int32  `json:"tze_mode" db:"tze_mode"` // 4-byte mode (demo: 0=open, 1=close; stark_verify: 0=initialize, 1=verify)
 }
 
 // TzeOutput represents a TZE output in a transaction
@@ -19,13 +19,13 @@ type TzeOutput struct {
 	SpentByTxID   *string `json:"spent_by_txid,omitempty" db:"spent_by_txid"`
 	SpentByVin    *int    `json:"spent_by_vin,omitempty" db:"spent_by_vin"`
 	SpentAtHeight *int64  `json:"spent_at_height,omitempty" db:"spent_at_height"`
-	TzeType       int16   `json:"tze_type" db:"tze_type"`         // 0=demo, 1=stark_verify
-	TzeMode       int16   `json:"tze_mode" db:"tze_mode"`         // demo: 0=open, 1=close; stark_verify: 0=initialize, 1=verify
+	TzeType       int32   `json:"tze_type" db:"tze_type"`         // 4-byte extension_id (0=demo, 1=stark_verify)
+	TzeMode       int32   `json:"tze_mode" db:"tze_mode"`         // 4-byte mode (demo: 0=open, 1=close; stark_verify: 0=initialize, 1=verify)
 	Precondition  []byte  `json:"precondition" db:"precondition"` // TZE precondition data
 }
 
-// TzeType represents the type of TZE transaction
-type TzeType int16
+// TzeType represents the type of TZE transaction (4-byte extension_id)
+type TzeType int32
 
 const (
 	TzeTypeDemo        TzeType = 0
@@ -56,11 +56,11 @@ func ParseTzeType(s string) (TzeType, bool) {
 	}
 }
 
-// TzeMode represents the mode of TZE operation
+// TzeMode represents the mode of TZE operation (4-byte mode field)
 // Note: The meaning of mode values depends on the TzeType
 // For demo: 0=open, 1=close
 // For stark_verify: 0=initialize, 1=verify
-type TzeMode int16
+type TzeMode int32
 
 const (
 	// Demo modes

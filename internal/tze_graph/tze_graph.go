@@ -3,8 +3,10 @@ package tze_graph
 import (
 	"context"
 	"fmt"
+	"log"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/keep-starknet-strange/ztarknet/zindex/internal/config"
 	"github.com/keep-starknet-strange/ztarknet/zindex/internal/db/postgres"
 )
@@ -23,8 +25,8 @@ func InitSchema() error {
 			value BIGINT NOT NULL,
 			prev_txid VARCHAR(64) NOT NULL,
 			prev_vout INT NOT NULL,
-			tze_type SMALLINT NOT NULL,  -- 0=demo, 1=stark_verify
-			tze_mode SMALLINT NOT NULL,  -- demo: 0=open, 1=close; stark_verify: 0=initialize, 1=verify
+			tze_type INT NOT NULL,  -- 4-byte extension_id (0=demo, 1=stark_verify)
+			tze_mode INT NOT NULL,  -- 4-byte mode (demo: 0=open, 1=close; stark_verify: 0=initialize, 1=verify)
 			PRIMARY KEY (txid, vin)
 		);
 
@@ -43,8 +45,8 @@ func InitSchema() error {
 			spent_by_txid VARCHAR(64),
 			spent_by_vin INT,
 			spent_at_height BIGINT,
-			tze_type SMALLINT NOT NULL,  -- 0=demo, 1=stark_verify
-			tze_mode SMALLINT NOT NULL,  -- demo: 0=open, 1=close; stark_verify: 0=initialize, 1=verify
+			tze_type INT NOT NULL,  -- 4-byte extension_id (0=demo, 1=stark_verify)
+			tze_mode INT NOT NULL,  -- 4-byte mode (demo: 0=open, 1=close; stark_verify: 0=initialize, 1=verify)
 			precondition BYTEA,
 			PRIMARY KEY (txid, vout)
 		);
@@ -385,4 +387,94 @@ func GetTzeOutputsByValue(minValue int64, limit, offset int) ([]TzeOutput, error
 	}
 
 	return outputs, nil
+}
+
+// ============================================================================
+// TZE STORAGE FUNCTIONS
+// ============================================================================
+
+// DBTX is an interface that both pgxpool.Pool and pgx.Tx implement
+// This allows functions to work with either a connection pool or a transaction
+type DBTX interface {
+	Exec(ctx context.Context, sql string, arguments ...interface{}) (pgconn.CommandTag, error)
+	Query(ctx context.Context, sql string, args ...interface{}) (pgx.Rows, error)
+	QueryRow(ctx context.Context, sql string, args ...interface{}) pgx.Row
+}
+
+// StoreTzeOutput inserts or updates a TZE output in the database
+// If postgresTx is provided, it will be used; otherwise a standalone query is executed
+// If the precondition exceeds the maximum size, it will be stored as an empty byte array
+func StoreTzeOutput(postgresTx DBTX, txid string, vout int, value int64, tzeType int32, tzeMode int32, precondition []byte) error {
+	ctx := context.Background()
+
+	// Validate precondition size - if it exceeds max size, store empty byte array instead
+	if err := ValidatePreconditionSize(precondition); err != nil {
+		log.Printf("Warning: Precondition for output %s:%d exceeds maximum size, storing empty precondition: %v", txid, vout, err)
+		precondition = []byte{}
+	}
+
+	query := `
+		INSERT INTO tze_outputs (txid, vout, value, tze_type, tze_mode, precondition)
+		VALUES ($1, $2, $3, $4, $5, $6)
+		ON CONFLICT (txid, vout) DO UPDATE SET
+			value = EXCLUDED.value,
+			tze_type = EXCLUDED.tze_type,
+			tze_mode = EXCLUDED.tze_mode,
+			precondition = EXCLUDED.precondition
+	`
+
+	if postgresTx == nil {
+		postgresTx = postgres.DB
+	}
+
+	_, err := postgresTx.Exec(ctx, query, txid, vout, value, tzeType, tzeMode, precondition)
+	if err != nil {
+		return fmt.Errorf("failed to store tze output %s:%d: %w", txid, vout, err)
+	}
+
+	return nil
+}
+
+// StoreTzeInput inserts or updates a TZE input in the database
+// and marks the corresponding TZE output as spent
+// If postgresTx is provided, it will be used; otherwise a standalone query is executed
+func StoreTzeInput(postgresTx DBTX, txid string, vin int, value int64, prevTxid string, prevVout int, tzeType int32, tzeMode int32, blockHeight int64) error {
+	ctx := context.Background()
+
+	if postgresTx == nil {
+		postgresTx = postgres.DB
+	}
+
+	// Insert the TZE input
+	inputQuery := `
+		INSERT INTO tze_inputs (txid, vin, value, prev_txid, prev_vout, tze_type, tze_mode)
+		VALUES ($1, $2, $3, $4, $5, $6, $7)
+		ON CONFLICT (txid, vin) DO UPDATE SET
+			value = EXCLUDED.value,
+			prev_txid = EXCLUDED.prev_txid,
+			prev_vout = EXCLUDED.prev_vout,
+			tze_type = EXCLUDED.tze_type,
+			tze_mode = EXCLUDED.tze_mode
+	`
+
+	_, err := postgresTx.Exec(ctx, inputQuery, txid, vin, value, prevTxid, prevVout, tzeType, tzeMode)
+	if err != nil {
+		return fmt.Errorf("failed to store tze input %s:%d: %w", txid, vin, err)
+	}
+
+	// Mark the previous TZE output as spent
+	outputQuery := `
+		UPDATE tze_outputs
+		SET spent_by_txid = $1,
+		    spent_by_vin = $2,
+		    spent_at_height = $3
+		WHERE txid = $4 AND vout = $5
+	`
+
+	_, err = postgresTx.Exec(ctx, outputQuery, txid, vin, blockHeight, prevTxid, prevVout)
+	if err != nil {
+		return fmt.Errorf("failed to mark tze output %s:%d as spent: %w", prevTxid, prevVout, err)
+	}
+
+	return nil
 }
