@@ -276,8 +276,8 @@ func GetStarkProofsBySize(w http.ResponseWriter, r *http.Request) {
 
 // GetZtarknetFacts retrieves Ztarknet facts by verifier ID and transaction ID
 func GetZtarknetFacts(w http.ResponseWriter, r *http.Request) {
-	if !config.IsModuleEnabled("STARKS") {
-		utils.WriteErrorJson(w, http.StatusNotFound, "STARKS module is disabled")
+	if !starks.ShouldIndexZtarknet() {
+		utils.WriteErrorJson(w, http.StatusNotFound, "Ztarknet indexing is disabled")
 		return
 	}
 
@@ -309,8 +309,8 @@ func GetZtarknetFacts(w http.ResponseWriter, r *http.Request) {
 
 // GetZtarknetFactsByVerifier retrieves all Ztarknet facts for a verifier with pagination
 func GetZtarknetFactsByVerifier(w http.ResponseWriter, r *http.Request) {
-	if !config.IsModuleEnabled("STARKS") {
-		utils.WriteErrorJson(w, http.StatusNotFound, "STARKS module is disabled")
+	if !starks.ShouldIndexZtarknet() {
+		utils.WriteErrorJson(w, http.StatusNotFound, "Ztarknet indexing is disabled")
 		return
 	}
 
@@ -335,8 +335,8 @@ func GetZtarknetFactsByVerifier(w http.ResponseWriter, r *http.Request) {
 
 // GetZtarknetFactsByTransaction retrieves all Ztarknet facts for a transaction
 func GetZtarknetFactsByTransaction(w http.ResponseWriter, r *http.Request) {
-	if !config.IsModuleEnabled("STARKS") {
-		utils.WriteErrorJson(w, http.StatusNotFound, "STARKS module is disabled")
+	if !starks.ShouldIndexZtarknet() {
+		utils.WriteErrorJson(w, http.StatusNotFound, "Ztarknet indexing is disabled")
 		return
 	}
 
@@ -357,8 +357,8 @@ func GetZtarknetFactsByTransaction(w http.ResponseWriter, r *http.Request) {
 
 // GetZtarknetFactsByBlock retrieves all Ztarknet facts for a specific block
 func GetZtarknetFactsByBlock(w http.ResponseWriter, r *http.Request) {
-	if !config.IsModuleEnabled("STARKS") {
-		utils.WriteErrorJson(w, http.StatusNotFound, "STARKS module is disabled")
+	if !starks.ShouldIndexZtarknet() {
+		utils.WriteErrorJson(w, http.StatusNotFound, "Ztarknet indexing is disabled")
 		return
 	}
 
@@ -379,8 +379,8 @@ func GetZtarknetFactsByBlock(w http.ResponseWriter, r *http.Request) {
 
 // GetZtarknetFactsByState retrieves Ztarknet facts by state hash
 func GetZtarknetFactsByState(w http.ResponseWriter, r *http.Request) {
-	if !config.IsModuleEnabled("STARKS") {
-		utils.WriteErrorJson(w, http.StatusNotFound, "STARKS module is disabled")
+	if !starks.ShouldIndexZtarknet() {
+		utils.WriteErrorJson(w, http.StatusNotFound, "Ztarknet indexing is disabled")
 		return
 	}
 
@@ -401,8 +401,8 @@ func GetZtarknetFactsByState(w http.ResponseWriter, r *http.Request) {
 
 // GetZtarknetFactsByProgramHash retrieves Ztarknet facts by program hash
 func GetZtarknetFactsByProgramHash(w http.ResponseWriter, r *http.Request) {
-	if !config.IsModuleEnabled("STARKS") {
-		utils.WriteErrorJson(w, http.StatusNotFound, "STARKS module is disabled")
+	if !starks.ShouldIndexZtarknet() {
+		utils.WriteErrorJson(w, http.StatusNotFound, "Ztarknet indexing is disabled")
 		return
 	}
 
@@ -423,8 +423,8 @@ func GetZtarknetFactsByProgramHash(w http.ResponseWriter, r *http.Request) {
 
 // GetZtarknetFactsByInnerProgramHash retrieves Ztarknet facts by inner program hash
 func GetZtarknetFactsByInnerProgramHash(w http.ResponseWriter, r *http.Request) {
-	if !config.IsModuleEnabled("STARKS") {
-		utils.WriteErrorJson(w, http.StatusNotFound, "STARKS module is disabled")
+	if !starks.ShouldIndexZtarknet() {
+		utils.WriteErrorJson(w, http.StatusNotFound, "Ztarknet indexing is disabled")
 		return
 	}
 
@@ -445,8 +445,8 @@ func GetZtarknetFactsByInnerProgramHash(w http.ResponseWriter, r *http.Request) 
 
 // GetRecentZtarknetFacts retrieves the most recent Ztarknet facts with pagination
 func GetRecentZtarknetFacts(w http.ResponseWriter, r *http.Request) {
-	if !config.IsModuleEnabled("STARKS") {
-		utils.WriteErrorJson(w, http.StatusNotFound, "STARKS module is disabled")
+	if !starks.ShouldIndexZtarknet() {
+		utils.WriteErrorJson(w, http.StatusNotFound, "Ztarknet indexing is disabled")
 		return
 	}
 
@@ -465,8 +465,8 @@ func GetRecentZtarknetFacts(w http.ResponseWriter, r *http.Request) {
 
 // GetStateTransition retrieves the state transition from old_state to new_state
 func GetStateTransition(w http.ResponseWriter, r *http.Request) {
-	if !config.IsModuleEnabled("STARKS") {
-		utils.WriteErrorJson(w, http.StatusNotFound, "STARKS module is disabled")
+	if !starks.ShouldIndexZtarknet() {
+		utils.WriteErrorJson(w, http.StatusNotFound, "Ztarknet indexing is disabled")
 		return
 	}
 

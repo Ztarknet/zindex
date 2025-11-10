@@ -80,7 +80,7 @@ func InitSchema() error {
 
 // ShouldIndexZtarknet returns whether ztarknet facts should be indexed based on configuration
 func ShouldIndexZtarknet() bool {
-	return config.Conf.Modules.Starks.IndexZtarknet
+	return config.Conf.Modules.Starks.Enabled && config.Conf.Modules.Starks.IndexZtarknet
 }
 
 // ============================================================================
