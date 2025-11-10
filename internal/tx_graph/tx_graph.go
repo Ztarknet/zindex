@@ -320,8 +320,8 @@ func GetTransactionGraph(txid string, depth int) ([]string, error) {
 }
 
 // StoreTransaction inserts or updates a transaction in the database
-// If tx is provided, it will be used; otherwise a standalone query is executed
-func StoreTransaction(tx DBTX, txid string, blockHeight int64, blockHash string, version int, locktime int64, txType string, totalOutput int64, totalFee int64, size int) error {
+// If postgresTx is provided, it will be used; otherwise a standalone query is executed
+func StoreTransaction(postgresTx DBTX, txid string, blockHeight int64, blockHash string, version int, locktime int64, txType string, totalOutput int64, totalFee int64, size int) error {
 	ctx := context.Background()
 
 	query := `
@@ -338,11 +338,11 @@ func StoreTransaction(tx DBTX, txid string, blockHeight int64, blockHash string,
 			size = EXCLUDED.size
 	`
 
-	if tx == nil {
-		tx = postgres.DB
+	if postgresTx == nil {
+		postgresTx = postgres.DB
 	}
 
-	_, err := tx.Exec(ctx, query, txid, blockHeight, blockHash, version, locktime, txType, totalOutput, totalFee, size)
+	_, err := postgresTx.Exec(ctx, query, txid, blockHeight, blockHash, version, locktime, txType, totalOutput, totalFee, size)
 	if err != nil {
 		return fmt.Errorf("failed to store transaction %s: %w", txid, err)
 	}
@@ -351,8 +351,8 @@ func StoreTransaction(tx DBTX, txid string, blockHeight int64, blockHash string,
 }
 
 // StoreTransactionOutput inserts or updates a transaction output in the database
-// If tx is provided, it will be used; otherwise a standalone query is executed
-func StoreTransactionOutput(tx DBTX, txid string, vout int, value int64) error {
+// If postgresTx is provided, it will be used; otherwise a standalone query is executed
+func StoreTransactionOutput(postgresTx DBTX, txid string, vout int, value int64) error {
 	ctx := context.Background()
 
 	query := `
@@ -362,11 +362,11 @@ func StoreTransactionOutput(tx DBTX, txid string, vout int, value int64) error {
 			value = EXCLUDED.value
 	`
 
-	if tx == nil {
-		tx = postgres.DB
+	if postgresTx == nil {
+		postgresTx = postgres.DB
 	}
 
-	_, err := tx.Exec(ctx, query, txid, vout, value)
+	_, err := postgresTx.Exec(ctx, query, txid, vout, value)
 	if err != nil {
 		return fmt.Errorf("failed to store transaction output %s:%d: %w", txid, vout, err)
 	}
@@ -376,12 +376,12 @@ func StoreTransactionOutput(tx DBTX, txid string, vout int, value int64) error {
 
 // StoreTransactionInput inserts or updates a transaction input in the database
 // and marks the corresponding output as spent
-// If tx is provided, it will be used; otherwise a standalone query is executed
-func StoreTransactionInput(tx DBTX, txid string, vin int, value int64, prevTxid string, prevVout int, sequence int64, blockHeight int64) error {
+// If postgresTx is provided, it will be used; otherwise a standalone query is executed
+func StoreTransactionInput(postgresTx DBTX, txid string, vin int, value int64, prevTxid string, prevVout int, sequence int64, blockHeight int64) error {
 	ctx := context.Background()
 
-	if tx == nil {
-		tx = postgres.DB
+	if postgresTx == nil {
+		postgresTx = postgres.DB
 	}
 
 	// Insert the input
@@ -395,7 +395,7 @@ func StoreTransactionInput(tx DBTX, txid string, vin int, value int64, prevTxid 
 			sequence = EXCLUDED.sequence
 	`
 
-	_, err := tx.Exec(ctx, inputQuery, txid, vin, value, prevTxid, prevVout, sequence)
+	_, err := postgresTx.Exec(ctx, inputQuery, txid, vin, value, prevTxid, prevVout, sequence)
 	if err != nil {
 		return fmt.Errorf("failed to store transaction input %s:%d: %w", txid, vin, err)
 	}
@@ -409,7 +409,7 @@ func StoreTransactionInput(tx DBTX, txid string, vin int, value int64, prevTxid 
 		WHERE txid = $4 AND vout = $5
 	`
 
-	_, err = tx.Exec(ctx, outputQuery, txid, vin, blockHeight, prevTxid, prevVout)
+	_, err = postgresTx.Exec(ctx, outputQuery, txid, vin, blockHeight, prevTxid, prevVout)
 	if err != nil {
 		return fmt.Errorf("failed to mark output %s:%d as spent: %w", prevTxid, prevVout, err)
 	}

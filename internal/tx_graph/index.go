@@ -25,22 +25,22 @@ func IndexTxGraph(block *types.ZcashBlock) error {
 	ctx := context.Background()
 
 	// Begin a database transaction for the entire block
-	dbTx, err := postgres.DB.Begin(ctx)
+	postgresTx, err := postgres.DB.Begin(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to begin database transaction for block %d: %w", block.Height, err)
 	}
-	defer dbTx.Rollback(ctx)
+	defer postgresTx.Rollback(ctx)
 
 	// Process each transaction in the block
 	for _, tx := range block.Tx {
-		if err := indexTransaction(dbTx, block, &tx); err != nil {
+		if err := indexTransaction(postgresTx, block, &tx); err != nil {
 			return fmt.Errorf("failed to index transaction %s in block %d: %w",
 				tx.TxID, block.Height, err)
 		}
 	}
 
 	// Commit the transaction
-	if err := dbTx.Commit(ctx); err != nil {
+	if err := postgresTx.Commit(ctx); err != nil {
 		return fmt.Errorf("failed to commit database transaction for block %d: %w", block.Height, err)
 	}
 
@@ -49,7 +49,7 @@ func IndexTxGraph(block *types.ZcashBlock) error {
 }
 
 // indexTransaction processes a single transaction and its inputs/outputs
-func indexTransaction(dbTx DBTX, block *types.ZcashBlock, tx *types.ZcashTransaction) error {
+func indexTransaction(postgresTx DBTX, block *types.ZcashBlock, tx *types.ZcashTransaction) error {
 	// Determine transaction type
 	txType := determineTransactionType(tx)
 
@@ -64,7 +64,7 @@ func indexTransaction(dbTx DBTX, block *types.ZcashBlock, tx *types.ZcashTransac
 
 	// Store the transaction
 	err := StoreTransaction(
-		dbTx,
+		postgresTx,
 		tx.TxID,
 		block.Height,
 		block.Hash,
@@ -82,7 +82,7 @@ func indexTransaction(dbTx DBTX, block *types.ZcashBlock, tx *types.ZcashTransac
 	// Store transaction outputs
 	for _, vout := range tx.Vout {
 		err := StoreTransactionOutput(
-			dbTx,
+			postgresTx,
 			tx.TxID,
 			int(vout.N),
 			vout.ValueZat,
@@ -105,7 +105,7 @@ func indexTransaction(dbTx DBTX, block *types.ZcashBlock, tx *types.ZcashTransac
 			value := int64(0)
 
 			err := StoreTransactionInput(
-				dbTx,
+				postgresTx,
 				tx.TxID,
 				i,
 				value,
