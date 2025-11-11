@@ -248,11 +248,16 @@ func GetRecentActiveAccounts(limit int) ([]Account, error) {
 		`SELECT a.address, a.balance, a.first_seen_at
 		 FROM accounts a
 		 WHERE a.address IN (
-			SELECT DISTINCT address
+			SELECT DISTINCT ON (address) address
 			FROM account_transactions
-			ORDER BY block_height DESC
-			LIMIT $1
-		 )`,
+			ORDER BY address, block_height DESC
+		 )
+		 ORDER BY (
+			SELECT MAX(block_height)
+			FROM account_transactions at
+			WHERE at.address = a.address
+		 ) DESC
+		 LIMIT $1`,
 		limit,
 	)
 	if err != nil {

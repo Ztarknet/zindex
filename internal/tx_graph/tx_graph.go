@@ -280,24 +280,28 @@ func GetInputSources(txid string) ([]TransactionInput, error) {
 func GetTransactionGraph(txid string, depth int) ([]string, error) {
 	query := `
 		WITH RECURSIVE tx_graph AS (
-			-- Start with the given transaction
+			-- Non-recursive term: Start with the given transaction
 			SELECT $1::VARCHAR AS txid, 0 AS depth
 
 			UNION
 
-			-- Find transactions that spent outputs from current level
-			SELECT DISTINCT o.spent_by_txid AS txid, g.depth + 1 AS depth
+			-- Recursive term: Find both spenders and sources in one unified query
+			SELECT DISTINCT connected_tx AS txid, g.depth + 1 AS depth
 			FROM tx_graph g
-			JOIN transaction_outputs o ON o.txid = g.txid
-			WHERE o.spent_by_txid IS NOT NULL AND g.depth < $2
+			CROSS JOIN LATERAL (
+				-- Transactions that spent outputs from current level (forward traversal)
+				SELECT o.spent_by_txid AS connected_tx
+				FROM transaction_outputs o
+				WHERE o.txid = g.txid AND o.spent_by_txid IS NOT NULL
 
-			UNION
+				UNION
 
-			-- Find transactions that provided inputs to current level
-			SELECT DISTINCT i.prev_txid AS txid, g.depth + 1 AS depth
-			FROM tx_graph g
-			JOIN transaction_inputs i ON i.txid = g.txid
-			WHERE g.depth < $2
+				-- Transactions that provided inputs to current level (backward traversal)
+				SELECT i.prev_txid AS connected_tx
+				FROM transaction_inputs i
+				WHERE i.txid = g.txid
+			) AS connections
+			WHERE g.depth < $2 AND connected_tx IS NOT NULL
 		)
 		SELECT DISTINCT txid FROM tx_graph WHERE txid IS NOT NULL ORDER BY txid
 	`
