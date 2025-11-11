@@ -4,191 +4,156 @@ A lightweight indexer for Zcash transparent transactions and TZE (Transparent Zc
 
 ## Overview
 
-Zindex tracks the transparent transaction graph on Zcash, providing APIs to query spending relationships, UTXO states, and TZE data. It's designed specifically to support Ztarknet's L2 settlement pattern where Circle-STARK proofs are verified via TZE on Zcash L1.
+zindex provides a PostgreSQL-backed indexing system for Zcash blockchain data with a REST API for querying. It continuously syncs with a Zcash node via RPC and indexes data according to enabled modules.
 
-## Features
+## Architecture
 
-- **Transaction Graph**: Track inputs, outputs, and spending relationships
-- **UTXO Tracking**: Query unspent outputs
-- **ACCOUNTS**: Track users/accounts utxos, history, and balances
-- **TZE Indexing**: Index TZE inputs/outputs with precondition and witness data
-- **STARK Anchors**: Specialized indexing for STARK verification TZE type
-- **Anchor Chain**: Track L2 state progression through linked anchor UTXOs
-- **REST API**: Query blockchain data with simple HTTP endpoints
+The indexer consists of four independent modules that can be enabled/disabled via configuration:
 
-## Development Status
+**Accounts Module** - Tracks transparent addresses, balances, and transaction history with atomic per-block processing.
 
-**Current**: Proof of concept for Ztarknet L2 settlement
+**Transaction Graph Module** - Indexes all transactions with complete input/output tracking, UTXO state management, and recursive graph traversal capabilities.
 
-**Focus**: Demonstrating feasibility of STARK verification via TZE on Zcash L1
+**TZE Graph Module** - Specialized indexing for TZE transactions including preconditions, witnesses, and UTXO tracking for TZE inputs/outputs by type and mode.
+
+**STARK Module** - Tracks STARK proof verifiers, proof submissions, and Ztarknet facts including state transitions and program hashes for L2 settlement verification.
 
 ## Project Structure
 
 ```
 zindex/
-├── cmd/
-│   └── run/           # Main entry point
-├── configs/           # YAML configuration files
-├── deploy/            # GCP deployment instructions
-├── internal/          # Internal packages
-│   ├── config/        # Configuration management
-│   ├── db/postgres/   # PostgreSQL database layer
-│   ├── provider/      # Zcash RPC provider
-│   ├── accounts/      # Account tracking module
-│   ├── tx_graph/      # Transaction graph module
-│   ├── tze_graph/     # TZE transaction module
-│   └── starks/        # STARK proof module
-└── routes/            # API endpoints
-    └── utils/         # API utilities (middleware, responses, requests)
+├── cmd/run/              # Application entry point
+├── configs/              # Configuration files
+├── deploy/               # Deployment guides and configs
+├── internal/
+│   ├── accounts/         # Accounts module
+│   ├── blocks/           # Block indexing (core)
+│   ├── config/           # Configuration management
+│   ├── db/postgres/      # PostgreSQL client
+│   ├── indexer/          # Core indexing engine
+│   ├── provider/         # Zcash RPC client
+│   ├── starks/           # STARK module
+│   ├── tx_graph/         # Transaction graph module
+│   ├── tze_graph/        # TZE graph module
+│   └── types/            # Shared types
+└── routes/               # HTTP API handlers
+    └── utils/            # API utilities
 ```
 
 ## Quick Start
 
 ### Prerequisites
 
-- Go 1.21.7 or higher
+- Go 1.23+
 - PostgreSQL 15+
-- Zcash node with RPC enabled
+- Zcash node with RPC access
 
 ### Installation
 
-1. Clone the repository:
+1. Clone and install dependencies:
 ```bash
-git clone https://github.com/keep-starknet-strange/ztarknet/zindex.git
-cd zindex
-```
-
-2. Install dependencies:
-```bash
+git clone https://github.com/keep-starknet-strange/ztarknet.git
+cd ztarknet/zindex
 make deps
 ```
 
-3. Configure the application:
-```bash
-cp configs/config.yaml configs/config.local.yaml
-# Edit config.local.yaml with your settings
-```
-
-4. Set up PostgreSQL:
+2. Configure database:
 ```bash
 createdb zindex
 createuser zindex
+export DB_PASSWORD=your_secure_password
 ```
 
-5. Build and run:
+3. Edit `configs/config.yaml`:
+   - Set `rpc.url` to your Zcash RPC endpoint
+   - Configure `database.*` settings (use `${DB_PASSWORD}` for password)
+   - Enable/disable modules as needed
+
+4. Run:
 ```bash
-make build
-make run
+make run          # Production build and run
+make run-dev      # Development mode (no build step)
 ```
 
-Or run in development mode:
-```bash
-make run-dev
-```
+The API will be available at `http://localhost:8080` by default.
 
 ### Configuration
 
-Edit `configs/config.yaml` to configure:
+The `configs/config.yaml` file contains all configuration options organized into sections:
 
-- **RPC**: Zcash node connection details
-- **API**: Server host, port, and CORS settings
-- **Database**: PostgreSQL connection settings
-- **Indexer**: Batch size, polling interval, reorg handling
-- **Modules**: Enable/disable specific features (TX_GRAPH, TZE_GRAPH, STARKS, ACCOUNTS)
+- **rpc**: Zcash node connection (url, timeout, retry settings)
+- **api**: HTTP server settings (host, port, CORS, timeouts, pagination limits)
+- **database**: PostgreSQL connection pool settings
+- **indexer**: Batch size, poll interval, start block, reorg handling
+- **modules**: Enable/disable each module (accounts, tx_graph, tze_graph, starks)
 
-### Command Line Options
+Environment variables can be substituted using `${VAR_NAME}` syntax in the YAML file.
+
+### Command Line Flags
 
 ```bash
-./bin/zindex --help
+./bin/zindex [flags]
 
-Options:
-  --config string       Path to config file (default "configs/config.yaml")
-  --rpc string          Zcash RPC URL (overrides config)
-  --start-block int     Starting block height (default: resume from last indexed)
+Flags:
+  --config PATH        Config file path (default: configs/config.yaml)
+  --rpc URL           Override Zcash RPC URL from config
+  --start-block N     Start indexing from block N (-1 to resume from last indexed)
 ```
 
-### API Endpoints
+## API Reference
 
-#### Health Check
-```bash
-GET /health
-```
+All endpoints return JSON. Query parameters support pagination with `limit` and `offset`.
 
-#### Accounts
-```bash
-GET /api/v1/account?address=<address>
-GET /api/v1/accounts?limit=50&offset=0
-```
+This project contains:
+- Core Endpoints: health & block querying
+- Accounts Endpoints: transparent account details
+- Transaction Graph: transaction, inputs, and outputs
+- TZE Graph: tze inputs and outputs details
+- STARKs: Verifiers and Ztarknet indexes
 
-#### Transaction Graph
-```bash
-GET /api/v1/transaction?txid=<txid>
-GET /api/v1/transaction/graph?txid=<txid>&depth=3
-```
+For the full api reference, see the [api documentation](docs/api-reference.md)
 
-#### TZE Transactions
-```bash
-GET /api/v1/tze/transaction?txid=<txid>
-GET /api/v1/tze/transactions?type=<type>&limit=50&offset=0
-GET /api/v1/tze/witnesses?txid=<txid>
-```
+## Development
 
-#### STARK Proofs
+### Available Make Targets
+
 ```bash
-GET /api/v1/proof?id=<id>
-GET /api/v1/proof/transaction?txid=<txid>
-GET /api/v1/proof/stats
-GET /api/v1/proof/unverified?limit=50
+make build              # Build binary to bin/zindex
+make run                # Build and run with config
+make run-dev            # Run without building (go run)
+make clean              # Remove build artifacts
+make deps               # Download and tidy dependencies
+make fmt                # Format code with gofmt
+make vet                # Run go vet
+make lint               # Run golangci-lint (requires golangci-lint)
+make test               # Run all tests
+make test-coverage      # Generate HTML coverage report
+make docker-build       # Build Docker image
+make docker-run         # Run Docker container
+make docker-stop        # Stop and remove container
+make docker-logs        # Follow container logs
 ```
 
 ### Docker
 
-Build and run with Docker:
-
 ```bash
-make docker-build
-make docker-run
-```
-
-Stop the container:
-```bash
-make docker-stop
-```
-
-View logs:
-```bash
-make docker-logs
-```
-
-### Development
-
-Format code:
-```bash
-make fmt
-```
-
-Run tests:
-```bash
-make test
-```
-
-Run tests with coverage:
-```bash
-make test-coverage
-```
-
-Lint code:
-```bash
-make lint
+make docker-build       # Builds zindex:latest image
+make docker-run         # Runs on port 8080, mounts configs/
+make docker-logs        # View logs
+make docker-stop        # Stop and remove container
 ```
 
 ## Deployment
 
-See the [deploy/README.md](deploy/README.md) for detailed instructions on deploying to Google Cloud Platform.
+See [deploy/README.md](deploy/README.md) for GCP deployment instructions (Cloud Run, Compute Engine, GKE).
+
+## License
+
+MIT
 
 ## Related Projects
 
-- [Ztarknet](https://github.com/Ztarknet/ztarknet) - Starknet-style L2 rollup for Zcash
+- [Ztarknet](https://github.com/keep-starknet-strange/ztarknet) - Parent project implementing STARK verification on Zcash
 - [Zebra](https://github.com/Ztarknet/zebra) - Fork with TZE support
 - [librustzcash](https://github.com/Ztarknet/librustzcash) - Fork with TZE implementation
-- [Stwo](https://github.com/starkware-libs/stwo-cairo) - Circle STARK prover
+- [Stwo](https://github.com/starkware-libs/stwo) - Circle STARK prover implementation
