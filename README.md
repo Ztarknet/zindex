@@ -52,8 +52,8 @@ zindex/
 
 1. Clone and install dependencies:
 ```bash
-git clone https://github.com/keep-starknet-strange/ztarknet.git
-cd ztarknet/zindex
+git clone https://github.com/Ztarknet/zindex.git
+cd zindex
 make deps
 ```
 
@@ -153,7 +153,7 @@ MIT
 
 ## Related Projects
 
-- [Ztarknet](https://github.com/keep-starknet-strange/ztarknet) - Parent project implementing STARK verification on Zcash
+- [Ztarknet](https://github.com/Ztarknet/ztarknet) - Parent project implementing STARK verification on Zcash
 - [Zebra](https://github.com/Ztarknet/zebra) - Fork with TZE support
 - [librustzcash](https://github.com/Ztarknet/librustzcash) - Fork with TZE implementation
 - [Stwo](https://github.com/starkware-libs/stwo) - Circle STARK prover implementation
