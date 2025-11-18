@@ -1,0 +1,19 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: zindex-ingress
+  annotations:
+    kubernetes.io/ingress.global-static-ip-name: zindex-static-ip
+    networking.gke.io/managed-certificates: zindex-managed-cert
+    kubernetes.io/ingress.class: "gce"
+spec:
+  rules:
+  - http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: {{ .Values.labels.zindex.name }}
+            port:
+              number: {{ .Values.ports.zindex }}

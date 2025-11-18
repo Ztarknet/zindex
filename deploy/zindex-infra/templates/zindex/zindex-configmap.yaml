@@ -1,0 +1,89 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Values.labels.zindex.name }}-config
+  labels:
+    app: {{ .Values.labels.zindex.name }}
+data:
+  config.yaml: |
+    # Zcash RPC Configuration
+    rpc:
+      url: "{{ .Values.zindex.rpc_url }}"
+      timeout: 30
+      retry_attempts: 3
+      retry_delay: 5
+
+    # API Server Configuration
+    api:
+      host: "0.0.0.0"
+      port: "8080"
+      production: {{ .Values.zindex.production }}
+      admin: {{ .Values.zindex.admin }}
+
+      cors:
+        allowed_origins:
+          - "*"
+        allowed_methods:
+          - "GET"
+          - "POST"
+          - "PUT"
+          - "DELETE"
+          - "OPTIONS"
+        allowed_headers:
+          - "Content-Type"
+          - "Authorization"
+
+      read_timeout: 30
+      write_timeout: 30
+      idle_timeout: 120
+      max_header_bytes: 1048576
+
+      pagination:
+        default_limit: 50
+        max_limit: 100
+        max_offset: 10000
+
+    # PostgreSQL Database Configuration
+    database:
+      host: "{{ .Values.labels.postgres.name }}"
+      port: "{{ .Values.ports.postgres }}"
+      user: "{{ .Values.postgres.user }}"
+      password: "{{ .Values.postgres.password }}"
+      dbname: "{{ .Values.postgres.db }}"
+      sslmode: "disable"
+
+      max_connections: 25
+      max_idle_connections: 5
+      connection_lifetime: 300
+      connect_timeout: 10
+      statement_timeout: 30
+
+    # Indexer Configuration
+    indexer:
+      batch_size: 10
+      poll_interval: 5
+      start_block: 0
+
+      enable_reorg_handling: false
+      max_reorg_depth: 5
+
+    # Module Configuration
+    modules:
+      # Transaction Graph - Tracks all transactions and their relationships
+      tx_graph:
+        enabled: true
+        max_graph_depth: 10
+
+      # TZE (Trusted Extension) Graph - Tracks TZE transactions
+      tze_graph:
+        enabled: true
+        max_precondition_size: 16384
+
+      # STARKS - Zero-knowledge proof verification and tracking
+      starks:
+        enabled: true
+        index_ztarknet: true
+
+      # Accounts - Track shielded and transparent addresses
+      accounts:
+        enabled: true

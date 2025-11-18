@@ -1,0 +1,30 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.labels.zindex.name }}
+spec:
+  replicas: {{ .Values.deployments.zindex.replicas }}
+  selector:
+    matchLabels:
+      app: {{ .Values.labels.zindex.name }}
+  template:
+    metadata:
+      labels:
+        app: {{ .Values.labels.zindex.name }}
+    spec:
+      containers:
+      - name: {{ .Values.labels.zindex.name }}
+        image: {{ .Values.deployments.zindex.image }}:{{ .Values.deployments.zindex.tag }}{{ if .Values.deployments.zindex.commit_sha }}-{{ .Values.deployments.zindex.commit_sha }}{{ end }}
+        imagePullPolicy: Always
+        command: ["./main"]
+        args: ["--config", "/app/config/config.yaml"]
+        ports:
+        - containerPort: {{ .Values.ports.zindex }}
+        volumeMounts:
+        - name: config
+          mountPath: /app/config
+          readOnly: true
+      volumes:
+      - name: config
+        configMap:
+          name: {{ .Values.labels.zindex.name }}-config
