@@ -31,8 +31,8 @@ services:
     volumes:
       - ./configs:/root/configs
     environment:
-      - CONFIG_PATH=/root/configs/config.yaml
-    command: ["./zindex", "--config", "/root/configs/config.yaml"]
+      - DB_PASSWORD=changeme
+    command: ["./zindex", "--config", "configs/config.docker.yaml"]
 
 volumes:
   postgres_data:

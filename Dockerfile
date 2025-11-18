@@ -1,4 +1,4 @@
-FROM golang:1.21.7-alpine AS builder
+FROM golang:1.23-alpine AS builder
 
 RUN apk add --no-cache git make ca-certificates
 
@@ -22,4 +22,4 @@ COPY --from=builder /app/configs ./configs
 
 EXPOSE 8080
 
-CMD ["./zindex", "--config", "configs/config.yaml"]
+CMD ["./zindex", "--config", "configs/config.docker.yaml"]

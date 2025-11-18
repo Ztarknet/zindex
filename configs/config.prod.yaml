@@ -1,0 +1,85 @@
+# Production Configuration for Zindex
+# This file is used when building the production Docker image
+
+# Zcash RPC Configuration
+rpc:
+  url: "https://rpc.regtest.ztarknet.cash"
+  timeout: 30
+  retry_attempts: 3
+  retry_delay: 5
+
+# API Server Configuration
+api:
+  host: "0.0.0.0"
+  port: "8080"
+  production: true
+  admin: false  # Disable admin endpoints in production
+
+  cors:
+    allowed_origins:
+      - "*"
+    allowed_methods:
+      - "GET"
+      - "POST"
+      - "PUT"
+      - "DELETE"
+      - "OPTIONS"
+    allowed_headers:
+      - "Content-Type"
+      - "Authorization"
+
+  read_timeout: 30
+  write_timeout: 30
+  idle_timeout: 120
+  max_header_bytes: 1048576
+
+  pagination:
+    default_limit: 50
+    max_limit: 100
+    max_offset: 10000
+
+# PostgreSQL Database Configuration
+# These values will be overridden by the ConfigMap in Kubernetes
+database:
+  host: "postgres.zindex-ztarknet.svc.cluster.local"
+  port: "5432"
+  user: "zindex"
+  password: "${DB_PASSWORD}"
+  dbname: "zindex"
+  sslmode: "disable"
+
+  max_connections: 25
+  max_idle_connections: 5
+  connection_lifetime: 300
+  connect_timeout: 10
+  statement_timeout: 30
+
+# Indexer Configuration
+indexer:
+  batch_size: 10
+  poll_interval: 5
+  start_block: 0
+
+  enable_reorg_handling: false
+  max_reorg_depth: 5
+
+# Module Configuration
+modules:
+  # Transaction Graph - Tracks all transactions and their relationships
+  tx_graph:
+    enabled: true
+    max_graph_depth: 10
+
+  # TZE (Trusted Extension) Graph - Tracks TZE transactions
+  tze_graph:
+    enabled: true
+    max_precondition_size: 16384  # 16Kb
+
+  # STARKS - Zero-knowledge proof verification and tracking
+  starks:
+    enabled: true
+    index_ztarknet: true
+
+  # Accounts - Track shielded and transparent addresses
+  accounts:
+    enabled: true

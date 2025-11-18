@@ -1,243 +1,294 @@
-# Deploying zIndex to GCP
+# Zindex Deployment Guide
 
-This guide provides instructions for deploying the zIndex Zcash indexer to Google Cloud Platform.
+This directory contains the Kubernetes/Helm deployment configuration for the Zindex service.
 
 ## Prerequisites
 
-- Google Cloud SDK installed and configured
-- Docker installed locally
-- A GCP project with billing enabled
-- Appropriate IAM permissions for the following services:
-  - Cloud Run or Compute Engine
-  - Cloud SQL (PostgreSQL)
-  - Container Registry or Artifact Registry
-  - VPC Network (for private connectivity)
+- GCP account with GKE Autopilot cluster
+- `gcloud` CLI configured
+- `kubectl` configured to access your cluster
+- `helm` v3 installed
+- Docker configured and logged in to your registry
 
-## Deployment Options
+## Architecture
 
-### Option 1: Cloud Run (Recommended for Serverless)
+The deployment consists of two main services:
+1. **PostgreSQL Database** - Persistent storage for indexed data
+2. **Zindex Server** - Go indexer service
 
-Cloud Run is recommended for automatic scaling and serverless deployment.
+## Initial Setup
 
-#### 1. Set up Cloud SQL PostgreSQL
-
-```bash
-# Create a PostgreSQL instance
-gcloud sql instances create zindex-db \
-  --database-version=POSTGRES_15 \
-  --tier=db-custom-2-8192 \
-  --region=us-central1
-
-# Create the database
-gcloud sql databases create zindex --instance=zindex-db
-
-# Create a user
-gcloud sql users create zindex \
-  --instance=zindex-db \
-  --password=SECURE_PASSWORD_HERE
-```
-
-#### 2. Build and Push Docker Image
+### 1. Create GKE Autopilot Cluster
 
 ```bash
-# Set your project ID
-export PROJECT_ID=your-project-id
-export REGION=us-central1
-
-# Build the Docker image
-docker build -t gcr.io/${PROJECT_ID}/zindex:latest .
-
-# Push to Google Container Registry
-docker push gcr.io/${PROJECT_ID}/zindex:latest
+gcloud container clusters create-auto zindex \
+  --region=us-central1 \
+  --project=YOUR_PROJECT_ID
 ```
 
-#### 3. Deploy to Cloud Run
+### 2. Configure kubectl
 
 ```bash
-# Deploy with Cloud SQL connection
-gcloud run deploy zindex \
-  --image gcr.io/${PROJECT_ID}/zindex:latest \
-  --region ${REGION} \
-  --platform managed \
-  --allow-unauthenticated \
-  --add-cloudsql-instances ${PROJECT_ID}:${REGION}:zindex-db \
-  --set-env-vars "CONFIG_PATH=/root/configs/config.yaml" \
-  --memory 2Gi \
-  --cpu 2 \
-  --timeout 3600 \
-  --max-instances 10
+gcloud container clusters get-credentials zindex \
+  --region=us-central1 \
+  --project=YOUR_PROJECT_ID
 ```
 
-### Option 2: Compute Engine (For Long-Running Indexer)
-
-For a continuously running indexer, Compute Engine provides more control.
-
-#### 1. Create a VM Instance
+### 3. Reserve Static IP
 
 ```bash
-# Create a VM with container-optimized OS
-gcloud compute instances create-with-container zindex \
-  --zone=us-central1-a \
-  --machine-type=e2-medium \
-  --container-image=gcr.io/${PROJECT_ID}/zindex:latest \
-  --container-restart-policy=always \
-  --boot-disk-size=50GB \
-  --tags=zindex-server
+gcloud compute addresses create zindex-static-ip \
+  --global \
+  --ip-version IPV4 \
+  --project=YOUR_PROJECT_ID
 ```
 
-#### 2. Set up Firewall Rules
-
+Get the IP address:
 ```bash
-# Allow API traffic
-gcloud compute firewall-rules create allow-zindex-api \
-  --allow tcp:8080 \
-  --target-tags zindex-server \
-  --source-ranges 0.0.0.0/0
+gcloud compute addresses describe zindex-static-ip \
+  --global \
+  --format="get(address)"
 ```
 
-#### 3. SSH and Configure
+### 4. Configure DNS
 
-```bash
-# SSH into the instance
-gcloud compute ssh zindex --zone=us-central1-a
+Point your domain (e.g., `zindex.ztarknet.cash`) to the static IP address from step 3.
 
-# View logs
-docker logs $(docker ps -q)
-```
+### 5. Update Managed Certificate
 
-### Option 3: GKE (Kubernetes for Production)
-
-For production deployments with high availability and complex orchestration needs.
-
-#### 1. Create GKE Cluster
-
-```bash
-gcloud container clusters create zindex-cluster \
-  --zone us-central1-a \
-  --num-nodes 3 \
-  --machine-type e2-standard-2 \
-  --enable-autoscaling \
-  --min-nodes 1 \
-  --max-nodes 5
-```
-
-#### 2. Apply Kubernetes Manifests
-
-See `kubernetes/` directory for deployment, service, and configmap manifests.
-
-```bash
-kubectl apply -f deploy/kubernetes/
-```
-
-## Configuration
-
-### Environment Variables
-
-Update the `configs/config.yaml` file or override with environment variables:
-
-- `RPC_URL`: Zcash RPC endpoint
-- `RPC_USERNAME`: RPC username
-- `RPC_PASSWORD`: RPC password
-- `DB_HOST`: PostgreSQL host (use Cloud SQL proxy for Cloud Run)
-- `DB_PORT`: PostgreSQL port
-- `DB_USER`: Database user
-- `DB_PASSWORD`: Database password
-- `DB_NAME`: Database name
-
-### Cloud SQL Proxy (for Cloud Run)
-
-When using Cloud Run with Cloud SQL, use the Unix socket connection:
+Edit `deploy/managed-cert.yaml` and update the domain:
 
 ```yaml
-database:
-  host: "/cloudsql/PROJECT_ID:REGION:INSTANCE_NAME"
-  port: "5432"
+spec:
+  domains:
+  - zindex.ztarknet.cash  # Your actual domain
 ```
 
-## Monitoring and Logging
+### 6. Deploy Managed Certificate
+
+```bash
+kubectl apply -f deploy/managed-cert.yaml
+```
+
+**Note:** It may take up to 15-20 minutes for the certificate to provision. You can check status with:
+
+```bash
+kubectl describe managedcertificate zindex-managed-cert
+```
+
+## Deployment
+
+### Using Make Commands (Recommended)
+
+```bash
+# Build and push Docker image
+make docker-build-prod
+make docker-push
+
+# Deploy/upgrade Helm chart
+make helm-install
+# or
+make helm-upgrade
+```
+
+### Manual Deployment
+
+#### 1. Build Production Docker Image
+
+```bash
+# Build for linux/amd64 platform
+docker build --platform linux/amd64 -f Dockerfile.prod -t brandonjroberts/zindex:latest .
+
+# Tag with version
+export APP_VERSION="v0.1.0"
+export COMMIT_SHA=$(git rev-parse --short HEAD)
+docker tag brandonjroberts/zindex:latest brandonjroberts/zindex:${APP_VERSION}-${COMMIT_SHA}
+
+# Push to registry
+docker push brandonjroberts/zindex:latest
+docker push brandonjroberts/zindex:${APP_VERSION}-${COMMIT_SHA}
+```
+
+#### 2. Configure Values
+
+Edit `deploy/zindex-infra/values.yaml` and update:
+
+- `postgres.password` - Set a strong password
+- `zindex.rpc_url` - Update to your production RPC endpoint
+- `deployments.zindex.image` - Your Docker registry
+- `deployments.zindex.tag` - Your image tag
+
+#### 3. Install with Helm
+
+```bash
+# Install
+helm install zindex deploy/zindex-infra \
+  --set postgres.password=YOUR_STRONG_PASSWORD \
+  --set deployments.zindex.commit_sha=${COMMIT_SHA}
+
+# Or upgrade existing deployment
+helm upgrade zindex deploy/zindex-infra \
+  --set postgres.password=YOUR_STRONG_PASSWORD \
+  --set deployments.zindex.commit_sha=${COMMIT_SHA}
+```
+
+## Verification
+
+### Check Deployment Status
+
+```bash
+# Check all resources
+kubectl get all
+
+# Check pods
+kubectl get pods
+
+# Check services
+kubectl get services
+
+# Check ingress
+kubectl get ingress
+
+# Check managed certificate status
+kubectl describe managedcertificate zindex-managed-cert
+```
 
 ### View Logs
 
 ```bash
-# Cloud Run logs
-gcloud run logs read zindex --region=${REGION}
+# Zindex server logs
+kubectl logs -f deployment/zindex-server
 
-# Compute Engine logs
-gcloud compute instances get-serial-port-output zindex --zone=us-central1-a
+# PostgreSQL logs
+kubectl logs -f deployment/zindex-postgres
 ```
 
-### Set Up Alerts
-
-Configure Cloud Monitoring alerts for:
-- High error rates
-- Memory usage > 80%
-- CPU usage > 80%
-- Database connection failures
-
-## Scaling
-
-### Cloud Run Auto-scaling
-
-Cloud Run automatically scales based on incoming requests. Configure:
+### Test API
 
 ```bash
-gcloud run services update zindex \
-  --min-instances 1 \
-  --max-instances 10 \
-  --concurrency 80
+# Once certificate is provisioned (may take 15-20 minutes)
+curl https://zindex.ztarknet.cash/health
 ```
 
-### Compute Engine Auto-scaling
+## Updating the Deployment
 
-For Compute Engine, use managed instance groups:
+### Code Changes
 
 ```bash
-gcloud compute instance-groups managed create zindex-group \
-  --base-instance-name zindex \
-  --size 1 \
-  --template zindex-template \
-  --zone us-central1-a
+# 1. Build new image with commit SHA
+export COMMIT_SHA=$(git rev-parse --short HEAD)
+make docker-build-prod
+make docker-push
 
-gcloud compute instance-groups managed set-autoscaling zindex-group \
-  --max-num-replicas 5 \
-  --min-num-replicas 1 \
-  --target-cpu-utilization 0.75 \
-  --zone us-central1-a
+# 2. Upgrade Helm deployment
+make helm-upgrade
 ```
 
-## Security Best Practices
+### Configuration Changes
 
-1. Use Secret Manager for sensitive credentials
-2. Enable VPC Service Controls
-3. Use private IP addresses for database connections
-4. Enable Cloud Armor for DDoS protection
-5. Implement proper IAM roles and permissions
-6. Enable audit logging
+```bash
+# Edit values.yaml
+vim deploy/zindex-infra/values.yaml
 
-## Cost Optimization
+# Apply changes
+helm upgrade zindex deploy/zindex-infra
+```
 
-- Use preemptible VMs for non-critical workloads
-- Set up committed use discounts for predictable workloads
-- Monitor with Cloud Billing budgets and alerts
-- Use Cloud SQL read replicas only when needed
-- Implement proper resource cleanup policies
+## Rollback
+
+```bash
+# View release history
+helm history zindex
+
+# Rollback to previous version
+helm rollback zindex
+
+# Rollback to specific revision
+helm rollback zindex 2
+```
+
+## Uninstall
+
+```bash
+# Uninstall Helm release
+helm uninstall zindex
+
+# Delete managed certificate
+kubectl delete -f deploy/managed-cert.yaml
+
+# Delete persistent volumes (optional - this will DELETE all data)
+kubectl delete pvc zindex-postgres-volume-claim
+```
+
+## Monitoring
+
+### Resource Usage
+
+```bash
+# Check pod resource usage
+kubectl top pods
+
+# Check node resource usage
+kubectl top nodes
+```
+
+### Database Access
+
+```bash
+# Port forward to PostgreSQL
+kubectl port-forward service/zindex-postgres 5432:5432
+
+# Connect with psql
+psql -h localhost -U zindex -d zindex
+```
 
 ## Troubleshooting
 
-### Common Issues
-
-1. **Database connection failures**: Check Cloud SQL proxy configuration and network settings
-2. **Out of memory errors**: Increase memory allocation in Cloud Run or VM instance
-3. **Slow indexing**: Increase batch size or add more instances
-4. **API timeouts**: Increase timeout settings and check RPC endpoint health
-
-### Health Checks
-
-Add health check endpoints to your application and configure:
+### Pod Not Starting
 
 ```bash
-gcloud run services update zindex \
-  --region=${REGION} \
-  --startup-cpu-boost \
-  --cpu-throttling
+# Describe pod for events
+kubectl describe pod <pod-name>
+
+# Check logs
+kubectl logs <pod-name>
+
+# Get previous logs if pod restarted
+kubectl logs <pod-name> --previous
 ```
+
+### Certificate Not Provisioning
+
+- Ensure DNS is properly configured and pointing to the static IP
+- Verify the domain in `managed-cert.yaml` matches your DNS record
+- Check certificate status: `kubectl describe managedcertificate zindex-managed-cert`
+- GKE managed certificates can take 15-20 minutes to provision
+
+### Database Connection Issues
+
+- Verify PostgreSQL pod is running: `kubectl get pods`
+- Check PostgreSQL logs: `kubectl logs deployment/zindex-postgres`
+- Verify service is exposed: `kubectl get service zindex-postgres`
+
+## Cost Optimization
+
+- Start with minimal resources (current config uses 1 replica for each service)
+- Monitor usage with `kubectl top` commands
+- Adjust replica counts in `values.yaml` as needed
+- Consider using Cloud SQL for production databases (managed, backups included)
+
+## Security Notes
+
+- Change the default PostgreSQL password in `values.yaml`
+- Use Kubernetes secrets for sensitive data in production
+- Consider using GCP Secret Manager with External Secrets Operator
+- Restrict CORS origins in production config
+- Disable admin endpoints in production (`zindex.admin: false`)
+
+## Next Steps
+
+- Set up monitoring with Prometheus/Grafana
+- Configure log aggregation
+- Set up automated backups for PostgreSQL
+- Implement CI/CD pipeline for automated deployments
+- Add health checks and readiness probes
