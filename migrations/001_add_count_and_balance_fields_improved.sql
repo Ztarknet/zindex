@@ -174,6 +174,6 @@ END $$;
 
 COMMIT;
 
-RAISE NOTICE '========================================';
-RAISE NOTICE 'Migration completed successfully!';
-RAISE NOTICE '========================================';
+-- ========================================
+-- Migration completed successfully!
+-- ========================================

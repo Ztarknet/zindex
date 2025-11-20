@@ -186,7 +186,7 @@ echo ""
 
 # Step 3: Get database credentials
 print_info "Retrieving database credentials from secrets..."
-export DB_PASSWORD=$(kubectl get secret postgres-secret -n "$NAMESPACE" -o jsonpath='{.data.postgres-password}' 2>/dev/null | base64 -d)
+export DB_PASSWORD=$(kubectl get configmap postgres-secret -n "$NAMESPACE" -o jsonpath='{.data.POSTGRES_PASSWORD}' 2>/dev/null)
 
 if [ -z "$DB_PASSWORD" ]; then
     print_error "Failed to retrieve database password from secret 'postgres-secret'"
@@ -196,7 +196,7 @@ fi
 export ZINDEX_DB_HOST="localhost"
 export ZINDEX_DB_PORT="5432"
 export ZINDEX_DB_NAME="zindex"
-export ZINDEX_DB_USER="postgres"
+export ZINDEX_DB_USER="zindex"
 
 print_success "Credentials retrieved"
 echo ""
@@ -206,7 +206,7 @@ if [ "$CREATE_BACKUP" = true ]; then
     print_info "Creating database backup..."
     BACKUP_FILE="backup_$(date +%Y%m%d_%H%M%S).sql"
 
-    PGPASSWORD="$DB_PASSWORD" pg_dump -h localhost -p 5432 -U postgres zindex > "$BACKUP_FILE" 2>/dev/null
+    PGPASSWORD="$DB_PASSWORD" pg_dump -h localhost -p 5432 -U zindex zindex > "$BACKUP_FILE" 2>/dev/null
 
     if [ $? -eq 0 ]; then
         print_success "Backup created: $BACKUP_FILE"
