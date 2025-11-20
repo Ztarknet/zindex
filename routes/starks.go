@@ -490,3 +490,79 @@ func GetStateTransition(w http.ResponseWriter, r *http.Request) {
 
 	utils.WriteDataJson(w, facts)
 }
+
+// CountVerifiers returns the total count of verifiers
+func CountVerifiers(w http.ResponseWriter, r *http.Request) {
+	if !config.IsModuleEnabled("STARKS") {
+		utils.WriteErrorJson(w, http.StatusNotFound, "STARKS module is disabled")
+		return
+	}
+
+	count, err := starks.CountVerifiers()
+	if err != nil {
+		utils.WriteErrorJson(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	utils.WriteDataJson(w, map[string]int64{"count": count})
+}
+
+// CountStarkProofs returns the total count of stark proofs with optional filters
+func CountStarkProofs(w http.ResponseWriter, r *http.Request) {
+	if !config.IsModuleEnabled("STARKS") {
+		utils.WriteErrorJson(w, http.StatusNotFound, "STARKS module is disabled")
+		return
+	}
+
+	verifierID := utils.ParseQueryParam(r, "verifier_id", "")
+	blockHeight := int64(utils.ParseQueryParamInt(r, "block_height", 0))
+
+	count, err := starks.CountStarkProofs(verifierID, blockHeight)
+	if err != nil {
+		utils.WriteErrorJson(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	utils.WriteDataJson(w, map[string]int64{"count": count})
+}
+
+// CountZtarknetFacts returns the total count of ztarknet facts with optional filters
+func CountZtarknetFacts(w http.ResponseWriter, r *http.Request) {
+	if !starks.ShouldIndexZtarknet() {
+		utils.WriteErrorJson(w, http.StatusNotFound, "Ztarknet indexing is disabled")
+		return
+	}
+
+	verifierID := utils.ParseQueryParam(r, "verifier_id", "")
+	blockHeight := int64(utils.ParseQueryParamInt(r, "block_height", 0))
+
+	count, err := starks.CountZtarknetFacts(verifierID, blockHeight)
+	if err != nil {
+		utils.WriteErrorJson(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	utils.WriteDataJson(w, map[string]int64{"count": count})
+}
+
+// GetSumProofSizesByVerifier returns the sum of all proof sizes for a given verifier
+func GetSumProofSizesByVerifier(w http.ResponseWriter, r *http.Request) {
+	if !config.IsModuleEnabled("STARKS") {
+		utils.WriteErrorJson(w, http.StatusNotFound, "STARKS module is disabled")
+		return
+	}
+
+	verifierID := utils.ParseQueryParam(r, "verifier_id", "")
+	if verifierID == "" {
+		utils.WriteErrorJson(w, http.StatusBadRequest, "Missing required parameter: verifier_id")
+		return
+	}
+
+	sum, err := starks.SumStarkProofSizesByVerifier(verifierID)
+	if err != nil {
+		utils.WriteErrorJson(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	utils.WriteDataJson(w, map[string]int64{"total_proof_size": sum})
+}

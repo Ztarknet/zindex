@@ -57,7 +57,8 @@ func GetTransactionsByBlock(w http.ResponseWriter, r *http.Request) {
 	utils.WriteDataJson(w, txs)
 }
 
-// GetTransactionsByType retrieves transactions filtered by type with pagination
+// GetTransactionsByType retrieves transactions filtered by type(s) with pagination
+// Accepts comma-separated types (e.g., "tze,t2t,t2z")
 func GetTransactionsByType(w http.ResponseWriter, r *http.Request) {
 	if !config.IsModuleEnabled("TX_GRAPH") {
 		utils.WriteErrorJson(w, http.StatusNotFound, "Transaction graph module is disabled")
@@ -70,7 +71,14 @@ func GetTransactionsByType(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Validate transaction type
+	// Parse comma-separated types
+	txTypes := utils.ParseCommaSeparated(txType)
+	if len(txTypes) == 0 {
+		utils.WriteErrorJson(w, http.StatusBadRequest, "Missing required parameter: type")
+		return
+	}
+
+	// Validate transaction types
 	validTypes := map[string]bool{
 		string(tx_graph.TxTypeCoinbase): true,
 		string(tx_graph.TxTypeTZE):      true,
@@ -79,16 +87,18 @@ func GetTransactionsByType(w http.ResponseWriter, r *http.Request) {
 		string(tx_graph.TxTypeZ2T):      true,
 		string(tx_graph.TxTypeZ2Z):      true,
 	}
-	if !validTypes[txType] {
-		utils.WriteErrorJson(w, http.StatusBadRequest, "Invalid transaction type. Must be one of: coinbase, tze, t2t, t2z, z2t, z2z")
-		return
+	for _, t := range txTypes {
+		if !validTypes[t] {
+			utils.WriteErrorJson(w, http.StatusBadRequest, "Invalid transaction type. Must be one of: coinbase, tze, t2t, t2z, z2t, z2z")
+			return
+		}
 	}
 
 	limit := utils.ParseQueryParamInt(r, "limit", utils.GetDefaultPaginationLimit())
 	offset := utils.ParseQueryParamInt(r, "offset", 0)
 	limit, offset = utils.NormalizePagination(limit, offset)
 
-	txs, err := tx_graph.GetTransactionsByType(txType, limit, offset)
+	txs, err := tx_graph.GetTransactionsByTypes(txTypes, limit, offset)
 	if err != nil {
 		utils.WriteErrorJson(w, http.StatusInternalServerError, err.Error())
 		return
@@ -325,4 +335,60 @@ func GetTransactionGraph(w http.ResponseWriter, r *http.Request) {
 	}
 
 	utils.WriteDataJson(w, txids)
+}
+
+// CountTransactions returns the total count of transactions with optional filters
+func CountTransactions(w http.ResponseWriter, r *http.Request) {
+	if !config.IsModuleEnabled("TX_GRAPH") {
+		utils.WriteErrorJson(w, http.StatusNotFound, "Transaction graph module is disabled")
+		return
+	}
+
+	txType := utils.ParseQueryParam(r, "type", "")
+	blockHeight := int64(utils.ParseQueryParamInt(r, "block_height", 0))
+
+	count, err := tx_graph.CountTransactions(txType, blockHeight)
+	if err != nil {
+		utils.WriteErrorJson(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	utils.WriteDataJson(w, map[string]int64{"count": count})
+}
+
+// CountTransactionOutputs returns the total count of transaction outputs with optional filters
+func CountTransactionOutputs(w http.ResponseWriter, r *http.Request) {
+	if !config.IsModuleEnabled("TX_GRAPH") {
+		utils.WriteErrorJson(w, http.StatusNotFound, "Transaction graph module is disabled")
+		return
+	}
+
+	txid := utils.ParseQueryParam(r, "txid", "")
+	spent := utils.ParseQueryParam(r, "spent", "") == "true"
+
+	count, err := tx_graph.CountTransactionOutputs(txid, spent)
+	if err != nil {
+		utils.WriteErrorJson(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	utils.WriteDataJson(w, map[string]int64{"count": count})
+}
+
+// CountTransactionInputs returns the total count of transaction inputs with optional filters
+func CountTransactionInputs(w http.ResponseWriter, r *http.Request) {
+	if !config.IsModuleEnabled("TX_GRAPH") {
+		utils.WriteErrorJson(w, http.StatusNotFound, "Transaction graph module is disabled")
+		return
+	}
+
+	txid := utils.ParseQueryParam(r, "txid", "")
+
+	count, err := tx_graph.CountTransactionInputs(txid)
+	if err != nil {
+		utils.WriteErrorJson(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	utils.WriteDataJson(w, map[string]int64{"count": count})
 }

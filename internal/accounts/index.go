@@ -115,6 +115,7 @@ func storeAccountTransactionsForTx(postgresTx DBTX, block *types.ZcashBlock, tx 
 					tx.TxID,
 					block.Height,
 					string(TxTypeReceive),
+					int64(vout.Value), // positive value for receiving
 				)
 				if err != nil {
 					return fmt.Errorf("failed to store receiving transaction for address %s: %w", address, err)

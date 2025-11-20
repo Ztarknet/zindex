@@ -93,6 +93,10 @@ func EnableAccountsRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/v1/accounts/transactions/count", GetAccountTransactionCount)
 	mux.HandleFunc("/api/v1/accounts/transactions/transaction", GetAccountTransaction)
 	mux.HandleFunc("/api/v1/accounts/transactions/by-txid", GetTransactionAccounts)
+
+	// Count routes
+	mux.HandleFunc("/api/v1/accounts/count", CountAccounts)
+	mux.HandleFunc("/api/v1/accounts/transactions/total-count", CountAccountTransactions)
 }
 
 // EnableTxGraphRoutes registers all transaction graph module routes if the module is enabled
@@ -123,6 +127,11 @@ func EnableTxGraphRoutes(mux *http.ServeMux) {
 
 	// Transaction graph routes
 	mux.HandleFunc("/api/v1/tx-graph/graph", GetTransactionGraph)
+
+	// Count routes
+	mux.HandleFunc("/api/v1/tx-graph/transactions/count", CountTransactions)
+	mux.HandleFunc("/api/v1/tx-graph/outputs/count", CountTransactionOutputs)
+	mux.HandleFunc("/api/v1/tx-graph/inputs/count", CountTransactionInputs)
 }
 
 // EnableTzeGraphRoutes registers all TZE graph module routes if the module is enabled
@@ -189,6 +198,14 @@ func EnableStarksRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/v1/starks/facts/by-inner-program-hash", GetZtarknetFactsByInnerProgramHash)
 	mux.HandleFunc("/api/v1/starks/facts/recent", GetRecentZtarknetFacts)
 	mux.HandleFunc("/api/v1/starks/facts/state-transition", GetStateTransition)
+
+	// Count routes
+	mux.HandleFunc("/api/v1/starks/verifiers/count", CountVerifiers)
+	mux.HandleFunc("/api/v1/starks/proofs/count", CountStarkProofs)
+	mux.HandleFunc("/api/v1/starks/facts/count", CountZtarknetFacts)
+
+	// Aggregation routes
+	mux.HandleFunc("/api/v1/starks/verifier/sum-proof-sizes", GetSumProofSizesByVerifier)
 }
 
 // EnableBlockRoutes registers all block routes (always enabled)

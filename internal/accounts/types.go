@@ -11,10 +11,11 @@ type Account struct {
 
 // AccountTransaction represents a transaction associated with an account
 type AccountTransaction struct {
-	Address     string `json:"address" db:"address"`
-	TxID        string `json:"txid" db:"txid"`
-	BlockHeight int64  `json:"block_height" db:"block_height"`
-	Type        string `json:"type" db:"type"` // receive, send
+	Address       string `json:"address" db:"address"`
+	TxID          string `json:"txid" db:"txid"`
+	BlockHeight   int64  `json:"block_height" db:"block_height"`
+	Type          string `json:"type" db:"type"`                     // receive, send
+	BalanceChange int64  `json:"balance_change" db:"balance_change"` // positive for receive, negative for send
 }
 
 // AccountTransactionType represents the direction of a transaction relative to an account

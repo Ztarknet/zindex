@@ -74,6 +74,8 @@ func indexTransaction(postgresTx DBTX, block *types.ZcashBlock, tx *types.ZcashT
 		totalOutput,
 		0, // TODO: totalFee - requires calculating total_input - total_output
 		tx.Size,
+		len(tx.Vin),  // input_count
+		len(tx.Vout), // output_count
 	)
 	if err != nil {
 		return fmt.Errorf("failed to store transaction: %w", err)

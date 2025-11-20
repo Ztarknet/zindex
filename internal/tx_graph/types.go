@@ -13,6 +13,8 @@ type Transaction struct {
 	TotalOutput int64     `json:"total_output" db:"total_output"`
 	TotalFee    int64     `json:"total_fee" db:"total_fee"`
 	Size        int       `json:"size" db:"size"`
+	InputCount  int       `json:"input_count" db:"input_count"`
+	OutputCount int       `json:"output_count" db:"output_count"`
 	CreatedAt   time.Time `json:"created_at" db:"created_at"`
 }
 

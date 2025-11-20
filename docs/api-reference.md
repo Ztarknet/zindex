@@ -18,6 +18,17 @@ Error responses:
 }
 ```
 
+## Recent Updates
+
+### Enhanced Transaction Data
+- **Transaction responses** now include `input_count` and `output_count` fields showing the number of inputs and outputs for each transaction.
+- **Account transaction responses** now include `balance_change` field indicating the amount by which the account balance changed (positive for receiving, negative for sending).
+
+### New Features
+- **Multiple transaction types**: The `GET /api/v1/tx-graph/transactions/by-type` endpoint now supports comma-separated transaction types (e.g., `?type=tze,t2t,t2z`).
+- **Count endpoints**: Added count endpoints for all modules with optional filters to get total counts of transactions, outputs, inputs, accounts, verifiers, proofs, and facts.
+- **Proof size aggregation**: Added `GET /api/v1/starks/verifier/sum-proof-sizes` endpoint to get the total proof size for a verifier.
+
 ## Table of Contents
 
 1. [Blocks Module](#blocks-module)
@@ -193,17 +204,21 @@ http://localhost:8080/api/v1/tx-graph/transactions/by-block?block_height=1500
 
 `GET /api/v1/tx-graph/transactions/by-type`
 
-Retrieves transactions filtered by type with pagination.
+Retrieves transactions filtered by type(s) with pagination. Supports multiple comma-separated types.
 
 **Query Parameters:**
-- `type` - Transaction type: `coinbase`, `tze`, `t2t`, `t2z`, `z2t`, `z2z` (required)
+- `type` - Transaction type(s): `coinbase`, `tze`, `t2t`, `t2z`, `z2t`, `z2z` (required). Multiple types can be specified as comma-separated values.
 - `limit` ![optional](https://img.shields.io/badge/-optional-blue) - Number of transactions to return
 - `offset` ![optional](https://img.shields.io/badge/-optional-blue) - Number of transactions to skip
 
 **Examples:**
 ```
+# Single type
 http://localhost:8080/api/v1/tx-graph/transactions/by-type?type=coinbase&limit=10
-http://localhost:8080/api/v1/tx-graph/transactions/by-type?type=t2z&limit=50&offset=0
+
+# Multiple types (comma-separated)
+http://localhost:8080/api/v1/tx-graph/transactions/by-type?type=tze,t2t,t2z&limit=50&offset=0
+http://localhost:8080/api/v1/tx-graph/transactions/by-type?type=coinbase,tze
 ```
 
 #### Get Recent Transactions
@@ -326,6 +341,106 @@ Retrieves all transactions that provided inputs to a given transaction.
 **Examples:**
 ```
 http://localhost:8080/api/v1/tx-graph/inputs/sources?txid=abc123def456
+```
+
+### Count
+
+#### Count Transactions
+
+`GET /api/v1/tx-graph/transactions/count`
+
+Returns the total count of transactions with optional filters.
+
+**Query Parameters:**
+- `type` ![optional](https://img.shields.io/badge/-optional-blue) - Filter by transaction type: `coinbase`, `tze`, `t2t`, `t2z`, `z2t`, `z2z`
+- `block_height` ![optional](https://img.shields.io/badge/-optional-blue) - Filter by block height
+
+**Response:**
+```json
+{
+  "result": "success",
+  "data": {
+    "count": 1234
+  }
+}
+```
+
+**Examples:**
+```
+# Total count of all transactions
+http://localhost:8080/api/v1/tx-graph/transactions/count
+
+# Count by type
+http://localhost:8080/api/v1/tx-graph/transactions/count?type=coinbase
+
+# Count by block height
+http://localhost:8080/api/v1/tx-graph/transactions/count?block_height=1000
+
+# Count by type and block height
+http://localhost:8080/api/v1/tx-graph/transactions/count?type=t2z&block_height=1500
+```
+
+#### Count Transaction Outputs
+
+`GET /api/v1/tx-graph/outputs/count`
+
+Returns the total count of transaction outputs with optional filters.
+
+**Query Parameters:**
+- `txid` ![optional](https://img.shields.io/badge/-optional-blue) - Filter by transaction ID
+- `spent` ![optional](https://img.shields.io/badge/-optional-blue) - Filter by spent status (`true` for spent outputs only)
+
+**Response:**
+```json
+{
+  "result": "success",
+  "data": {
+    "count": 5678
+  }
+}
+```
+
+**Examples:**
+```
+# Total count of all outputs
+http://localhost:8080/api/v1/tx-graph/outputs/count
+
+# Count outputs for a specific transaction
+http://localhost:8080/api/v1/tx-graph/outputs/count?txid=abc123def456
+
+# Count spent outputs only
+http://localhost:8080/api/v1/tx-graph/outputs/count?spent=true
+
+# Count spent outputs for a transaction
+http://localhost:8080/api/v1/tx-graph/outputs/count?txid=abc123def456&spent=true
+```
+
+#### Count Transaction Inputs
+
+`GET /api/v1/tx-graph/inputs/count`
+
+Returns the total count of transaction inputs with optional filters.
+
+**Query Parameters:**
+- `txid` ![optional](https://img.shields.io/badge/-optional-blue) - Filter by transaction ID
+
+**Response:**
+```json
+{
+  "result": "success",
+  "data": {
+    "count": 9012
+  }
+}
+```
+
+**Examples:**
+```
+# Total count of all inputs
+http://localhost:8080/api/v1/tx-graph/inputs/count
+
+# Count inputs for a specific transaction
+http://localhost:8080/api/v1/tx-graph/inputs/count?txid=abc123def456
 ```
 
 ### Graph
@@ -561,6 +676,64 @@ Retrieves all accounts associated with a transaction.
 **Examples:**
 ```
 http://localhost:8080/api/v1/accounts/transactions/by-txid?txid=abc123def456
+```
+
+### Count
+
+#### Count Accounts
+
+`GET /api/v1/accounts/count`
+
+Returns the total count of accounts.
+
+**Response:**
+```json
+{
+  "result": "success",
+  "data": {
+    "count": 12345
+  }
+}
+```
+
+**Examples:**
+```
+http://localhost:8080/api/v1/accounts/count
+```
+
+#### Count Account Transactions
+
+`GET /api/v1/accounts/transactions/total-count`
+
+Returns the total count of account transactions with optional filters.
+
+**Query Parameters:**
+- `address` ![optional](https://img.shields.io/badge/-optional-blue) - Filter by account address
+- `type` ![optional](https://img.shields.io/badge/-optional-blue) - Filter by transaction type: `send` or `receive`
+
+**Response:**
+```json
+{
+  "result": "success",
+  "data": {
+    "count": 6789
+  }
+}
+```
+
+**Examples:**
+```
+# Total count of all account transactions
+http://localhost:8080/api/v1/accounts/transactions/total-count
+
+# Count transactions for a specific address
+http://localhost:8080/api/v1/accounts/transactions/total-count?address=t1abc123def456
+
+# Count by transaction type
+http://localhost:8080/api/v1/accounts/transactions/total-count?type=receive
+
+# Count by address and type
+http://localhost:8080/api/v1/accounts/transactions/total-count?address=t1abc123def456&type=send
 ```
 
 ---
@@ -1155,6 +1328,125 @@ Retrieves the state transition from old_state to new_state.
 **Examples:**
 ```
 http://localhost:8080/api/v1/starks/facts/state-transition?old_state=0x123abc&new_state=0x456def
+```
+
+### Count
+
+#### Count Verifiers
+
+`GET /api/v1/starks/verifiers/count`
+
+Returns the total count of verifiers.
+
+**Response:**
+```json
+{
+  "result": "success",
+  "data": {
+    "count": 42
+  }
+}
+```
+
+**Examples:**
+```
+http://localhost:8080/api/v1/starks/verifiers/count
+```
+
+#### Count STARK Proofs
+
+`GET /api/v1/starks/proofs/count`
+
+Returns the total count of STARK proofs with optional filters.
+
+**Query Parameters:**
+- `verifier_id` ![optional](https://img.shields.io/badge/-optional-blue) - Filter by verifier ID
+- `block_height` ![optional](https://img.shields.io/badge/-optional-blue) - Filter by block height
+
+**Response:**
+```json
+{
+  "result": "success",
+  "data": {
+    "count": 2345
+  }
+}
+```
+
+**Examples:**
+```
+# Total count of all STARK proofs
+http://localhost:8080/api/v1/starks/proofs/count
+
+# Count by verifier
+http://localhost:8080/api/v1/starks/proofs/count?verifier_id=verifier123
+
+# Count by block height
+http://localhost:8080/api/v1/starks/proofs/count?block_height=1000
+
+# Count by verifier and block height
+http://localhost:8080/api/v1/starks/proofs/count?verifier_id=verifier123&block_height=1500
+```
+
+#### Count Ztarknet Facts
+
+`GET /api/v1/starks/facts/count`
+
+Returns the total count of Ztarknet facts with optional filters.
+
+**Query Parameters:**
+- `verifier_id` ![optional](https://img.shields.io/badge/-optional-blue) - Filter by verifier ID
+- `block_height` ![optional](https://img.shields.io/badge/-optional-blue) - Filter by block height
+
+**Response:**
+```json
+{
+  "result": "success",
+  "data": {
+    "count": 1234
+  }
+}
+```
+
+**Examples:**
+```
+# Total count of all Ztarknet facts
+http://localhost:8080/api/v1/starks/facts/count
+
+# Count by verifier
+http://localhost:8080/api/v1/starks/facts/count?verifier_id=verifier123
+
+# Count by block height
+http://localhost:8080/api/v1/starks/facts/count?block_height=1000
+
+# Count by verifier and block height
+http://localhost:8080/api/v1/starks/facts/count?verifier_id=verifier123&block_height=1500
+```
+
+### Aggregations
+
+#### Get Sum of Proof Sizes by Verifier
+
+`GET /api/v1/starks/verifier/sum-proof-sizes`
+
+Returns the aggregate sum of all STARK proof sizes for a given verifier.
+
+**Query Parameters:**
+- `verifier_id` - Verifier ID (required)
+
+**Response:**
+```json
+{
+  "result": "success",
+  "data": {
+    "total_proof_size": 1048576
+  }
+}
+```
+
+**Examples:**
+```
+http://localhost:8080/api/v1/starks/verifier/sum-proof-sizes?verifier_id=verifier123
 ```
 
 ---

@@ -38,6 +38,7 @@ func InitSchema() error {
 			txid VARCHAR(64) NOT NULL,
 			block_height BIGINT NOT NULL,
 			type VARCHAR(10) NOT NULL,
+			balance_change BIGINT NOT NULL DEFAULT 0,
 			PRIMARY KEY (address, txid),
 			FOREIGN KEY (address) REFERENCES accounts(address) ON DELETE CASCADE
 		);
@@ -132,7 +133,7 @@ func GetTopAccountsByBalance(limit int) ([]Account, error) {
 // GetAccountTransactions retrieves all transactions for an account
 func GetAccountTransactions(address string, limit, offset int) ([]AccountTransaction, error) {
 	txs, err := postgres.PostgresQuery[AccountTransaction](
-		`SELECT address, txid, block_height, type
+		`SELECT address, txid, block_height, type, balance_change
 		 FROM account_transactions
 		 WHERE address = $1
 		 ORDER BY block_height DESC
@@ -149,7 +150,7 @@ func GetAccountTransactions(address string, limit, offset int) ([]AccountTransac
 // GetAccountTransactionsByType retrieves transactions for an account filtered by type
 func GetAccountTransactionsByType(address string, txType string, limit, offset int) ([]AccountTransaction, error) {
 	txs, err := postgres.PostgresQuery[AccountTransaction](
-		`SELECT address, txid, block_height, type
+		`SELECT address, txid, block_height, type, balance_change
 		 FROM account_transactions
 		 WHERE address = $1 AND type = $2
 		 ORDER BY block_height DESC
@@ -176,7 +177,7 @@ func GetAccountSendingTransactions(address string, limit, offset int) ([]Account
 // GetAccountTransactionsByBlockRange retrieves transactions for an account within a block range
 func GetAccountTransactionsByBlockRange(address string, fromBlock, toBlock int64, limit, offset int) ([]AccountTransaction, error) {
 	txs, err := postgres.PostgresQuery[AccountTransaction](
-		`SELECT address, txid, block_height, type
+		`SELECT address, txid, block_height, type, balance_change
 		 FROM account_transactions
 		 WHERE address = $1 AND block_height >= $2 AND block_height <= $3
 		 ORDER BY block_height DESC
@@ -210,7 +211,7 @@ func GetAccountTransactionCount(address string) (int64, error) {
 // GetAccountTransaction retrieves a specific transaction for an account
 func GetAccountTransaction(address, txid string) (*AccountTransaction, error) {
 	tx, err := postgres.PostgresQueryOne[AccountTransaction](
-		`SELECT address, txid, block_height, type
+		`SELECT address, txid, block_height, type, balance_change
 		 FROM account_transactions
 		 WHERE address = $1 AND txid = $2`,
 		address, txid,
@@ -229,7 +230,7 @@ func GetAccountTransaction(address, txid string) (*AccountTransaction, error) {
 // GetTransactionAccounts retrieves all accounts associated with a transaction
 func GetTransactionAccounts(txid string) ([]AccountTransaction, error) {
 	txs, err := postgres.PostgresQuery[AccountTransaction](
-		`SELECT address, txid, block_height, type
+		`SELECT address, txid, block_height, type, balance_change
 		 FROM account_transactions
 		 WHERE txid = $1
 		 ORDER BY type, address`,
@@ -269,25 +270,64 @@ func GetRecentActiveAccounts(limit int) ([]Account, error) {
 
 // StoreAccountTransaction inserts or updates an account transaction in the database
 // If postgresTx is provided, it will be used; otherwise a standalone query is executed
-func StoreAccountTransaction(postgresTx DBTX, address string, txid string, blockHeight int64, txType string) error {
+func StoreAccountTransaction(postgresTx DBTX, address string, txid string, blockHeight int64, txType string, balanceChange int64) error {
 	ctx := context.Background()
 
 	query := `
-		INSERT INTO account_transactions (address, txid, block_height, type)
-		VALUES ($1, $2, $3, $4)
+		INSERT INTO account_transactions (address, txid, block_height, type, balance_change)
+		VALUES ($1, $2, $3, $4, $5)
 		ON CONFLICT (address, txid) DO UPDATE SET
 			block_height = EXCLUDED.block_height,
-			type = EXCLUDED.type
+			type = EXCLUDED.type,
+			balance_change = EXCLUDED.balance_change
 	`
 
 	if postgresTx == nil {
 		postgresTx = postgres.DB
 	}
 
-	_, err := postgresTx.Exec(ctx, query, address, txid, blockHeight, txType)
+	_, err := postgresTx.Exec(ctx, query, address, txid, blockHeight, txType, balanceChange)
 	if err != nil {
 		return fmt.Errorf("failed to store account transaction %s for address %s: %w", txid, address, err)
 	}
 
 	return nil
+}
+
+// CountAccounts returns the total count of accounts
+func CountAccounts() (int64, error) {
+	var count int64
+	err := postgres.DB.QueryRow(context.Background(), `SELECT COUNT(*) FROM accounts`).Scan(&count)
+	if err != nil {
+		return 0, fmt.Errorf("failed to count accounts: %w", err)
+	}
+	return count, nil
+}
+
+// CountAccountTransactions returns the total count of account transactions with optional filters
+func CountAccountTransactions(address string, txType string) (int64, error) {
+	var query string
+	var args []interface{}
+
+	if address != "" && txType != "" {
+		query = `SELECT COUNT(*) FROM account_transactions WHERE address = $1 AND type = $2`
+		args = []interface{}{address, txType}
+	} else if address != "" {
+		query = `SELECT COUNT(*) FROM account_transactions WHERE address = $1`
+		args = []interface{}{address}
+	} else if txType != "" {
+		query = `SELECT COUNT(*) FROM account_transactions WHERE type = $1`
+		args = []interface{}{txType}
+	} else {
+		query = `SELECT COUNT(*) FROM account_transactions`
+		args = []interface{}{}
+	}
+
+	var count int64
+	err := postgres.DB.QueryRow(context.Background(), query, args...).Scan(&count)
+	if err != nil {
+		return 0, fmt.Errorf("failed to count account transactions: %w", err)
+	}
+
+	return count, nil
 }

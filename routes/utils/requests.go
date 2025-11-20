@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 
 	"github.com/keep-starknet-strange/ztarknet/zindex/internal/config"
 )
@@ -99,4 +100,23 @@ func NormalizePaginationWithMax(limit, offset, maxLimit int) (int, int) {
 	}
 
 	return limit, offset
+}
+
+// ParseCommaSeparated splits a comma-separated string into a slice of trimmed strings
+func ParseCommaSeparated(value string) []string {
+	if value == "" {
+		return []string{}
+	}
+
+	parts := strings.Split(value, ",")
+	result := make([]string, 0, len(parts))
+
+	for _, part := range parts {
+		trimmed := strings.TrimSpace(part)
+		if trimmed != "" {
+			result = append(result, trimmed)
+		}
+	}
+
+	return result
 }

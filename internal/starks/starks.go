@@ -539,3 +539,86 @@ func StoreZtarknetFacts(postgresTx DBTX, verifierID, txid string, blockHeight, p
 
 	return nil
 }
+
+// ============================================================================
+// Count Functions
+// ============================================================================
+
+// CountVerifiers returns the total count of verifiers with optional filters
+func CountVerifiers() (int64, error) {
+	var count int64
+	err := postgres.DB.QueryRow(context.Background(), `SELECT COUNT(*) FROM verifiers`).Scan(&count)
+	if err != nil {
+		return 0, fmt.Errorf("failed to count verifiers: %w", err)
+	}
+	return count, nil
+}
+
+// CountStarkProofs returns the total count of stark proofs with optional filters
+func CountStarkProofs(verifierID string, blockHeight int64) (int64, error) {
+	var query string
+	var args []interface{}
+
+	if verifierID != "" && blockHeight > 0 {
+		query = `SELECT COUNT(*) FROM stark_proofs WHERE verifier_id = $1 AND block_height = $2`
+		args = []interface{}{verifierID, blockHeight}
+	} else if verifierID != "" {
+		query = `SELECT COUNT(*) FROM stark_proofs WHERE verifier_id = $1`
+		args = []interface{}{verifierID}
+	} else if blockHeight > 0 {
+		query = `SELECT COUNT(*) FROM stark_proofs WHERE block_height = $1`
+		args = []interface{}{blockHeight}
+	} else {
+		query = `SELECT COUNT(*) FROM stark_proofs`
+		args = []interface{}{}
+	}
+
+	var count int64
+	err := postgres.DB.QueryRow(context.Background(), query, args...).Scan(&count)
+	if err != nil {
+		return 0, fmt.Errorf("failed to count stark proofs: %w", err)
+	}
+
+	return count, nil
+}
+
+// CountZtarknetFacts returns the total count of ztarknet facts with optional filters
+func CountZtarknetFacts(verifierID string, blockHeight int64) (int64, error) {
+	var query string
+	var args []interface{}
+
+	if verifierID != "" && blockHeight > 0 {
+		query = `SELECT COUNT(*) FROM ztarknet_facts WHERE verifier_id = $1 AND block_height = $2`
+		args = []interface{}{verifierID, blockHeight}
+	} else if verifierID != "" {
+		query = `SELECT COUNT(*) FROM ztarknet_facts WHERE verifier_id = $1`
+		args = []interface{}{verifierID}
+	} else if blockHeight > 0 {
+		query = `SELECT COUNT(*) FROM ztarknet_facts WHERE block_height = $1`
+		args = []interface{}{blockHeight}
+	} else {
+		query = `SELECT COUNT(*) FROM ztarknet_facts`
+		args = []interface{}{}
+	}
+
+	var count int64
+	err := postgres.DB.QueryRow(context.Background(), query, args...).Scan(&count)
+	if err != nil {
+		return 0, fmt.Errorf("failed to count ztarknet facts: %w", err)
+	}
+
+	return count, nil
+}
+
+// SumStarkProofSizesByVerifier returns the sum of all proof sizes for a given verifier
+func SumStarkProofSizesByVerifier(verifierID string) (int64, error) {
+	var sum int64
+	err := postgres.DB.QueryRow(context.Background(),
+		`SELECT COALESCE(SUM(proof_size), 0) FROM stark_proofs WHERE verifier_id = $1`,
+		verifierID,
+	).Scan(&sum)
+	if err != nil {
+		return 0, fmt.Errorf("failed to sum proof sizes for verifier %s: %w", verifierID, err)
+	}
+	return sum, nil
+}

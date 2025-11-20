@@ -36,6 +36,8 @@ func InitSchema() error {
 			total_output BIGINT NOT NULL,
 			total_fee BIGINT NOT NULL,
 			size INT NOT NULL,
+			input_count INT NOT NULL DEFAULT 0,
+			output_count INT NOT NULL DEFAULT 0,
 			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 		);
 
@@ -92,7 +94,7 @@ func InitSchema() error {
 func GetTransaction(txid string) (*Transaction, error) {
 	tx, err := postgres.PostgresQueryOne[Transaction](
 		`SELECT txid, block_height, block_hash, version, locktime, type,
-		        total_output, total_fee, size, created_at
+		        total_output, total_fee, size, input_count, output_count, created_at
 		 FROM transactions WHERE txid = $1`,
 		txid,
 	)
@@ -111,7 +113,7 @@ func GetTransaction(txid string) (*Transaction, error) {
 func GetTransactionsByBlock(blockHeight int64) ([]Transaction, error) {
 	txs, err := postgres.PostgresQuery[Transaction](
 		`SELECT txid, block_height, block_hash, version, locktime, type,
-		        total_output, total_fee, size, created_at
+		        total_output, total_fee, size, input_count, output_count, created_at
 		 FROM transactions WHERE block_height = $1
 		 ORDER BY txid`,
 		blockHeight,
@@ -124,17 +126,27 @@ func GetTransactionsByBlock(blockHeight int64) ([]Transaction, error) {
 }
 
 // GetTransactionsByType retrieves transactions by type with pagination
+// Deprecated: Use GetTransactionsByTypes for multiple type support
 func GetTransactionsByType(txType string, limit, offset int) ([]Transaction, error) {
+	return GetTransactionsByTypes([]string{txType}, limit, offset)
+}
+
+// GetTransactionsByTypes retrieves transactions by multiple types with pagination
+func GetTransactionsByTypes(txTypes []string, limit, offset int) ([]Transaction, error) {
+	if len(txTypes) == 0 {
+		return []Transaction{}, nil
+	}
+
 	txs, err := postgres.PostgresQuery[Transaction](
 		`SELECT txid, block_height, block_hash, version, locktime, type,
-		        total_output, total_fee, size, created_at
-		 FROM transactions WHERE type = $1
+		        total_output, total_fee, size, input_count, output_count, created_at
+		 FROM transactions WHERE type = ANY($1)
 		 ORDER BY block_height DESC, txid
 		 LIMIT $2 OFFSET $3`,
-		txType, limit, offset,
+		txTypes, limit, offset,
 	)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get transactions by type: %w", err)
+		return nil, fmt.Errorf("failed to get transactions by types: %w", err)
 	}
 
 	return txs, nil
@@ -144,7 +156,7 @@ func GetTransactionsByType(txType string, limit, offset int) ([]Transaction, err
 func GetRecentTransactions(limit, offset int) ([]Transaction, error) {
 	txs, err := postgres.PostgresQuery[Transaction](
 		`SELECT txid, block_height, block_hash, version, locktime, type,
-		        total_output, total_fee, size, created_at
+		        total_output, total_fee, size, input_count, output_count, created_at
 		 FROM transactions
 		 ORDER BY block_height DESC, created_at DESC
 		 LIMIT $1 OFFSET $2`,
@@ -325,12 +337,12 @@ func GetTransactionGraph(txid string, depth int) ([]string, error) {
 
 // StoreTransaction inserts or updates a transaction in the database
 // If postgresTx is provided, it will be used; otherwise a standalone query is executed
-func StoreTransaction(postgresTx DBTX, txid string, blockHeight int64, blockHash string, version int, locktime int64, txType string, totalOutput int64, totalFee int64, size int) error {
+func StoreTransaction(postgresTx DBTX, txid string, blockHeight int64, blockHash string, version int, locktime int64, txType string, totalOutput int64, totalFee int64, size int, inputCount int, outputCount int) error {
 	ctx := context.Background()
 
 	query := `
-		INSERT INTO transactions (txid, block_height, block_hash, version, locktime, type, total_output, total_fee, size)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+		INSERT INTO transactions (txid, block_height, block_hash, version, locktime, type, total_output, total_fee, size, input_count, output_count)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
 		ON CONFLICT (txid) DO UPDATE SET
 			block_height = EXCLUDED.block_height,
 			block_hash = EXCLUDED.block_hash,
@@ -339,14 +351,16 @@ func StoreTransaction(postgresTx DBTX, txid string, blockHeight int64, blockHash
 			type = EXCLUDED.type,
 			total_output = EXCLUDED.total_output,
 			total_fee = EXCLUDED.total_fee,
-			size = EXCLUDED.size
+			size = EXCLUDED.size,
+			input_count = EXCLUDED.input_count,
+			output_count = EXCLUDED.output_count
 	`
 
 	if postgresTx == nil {
 		postgresTx = postgres.DB
 	}
 
-	_, err := postgresTx.Exec(ctx, query, txid, blockHeight, blockHash, version, locktime, txType, totalOutput, totalFee, size)
+	_, err := postgresTx.Exec(ctx, query, txid, blockHeight, blockHash, version, locktime, txType, totalOutput, totalFee, size, inputCount, outputCount)
 	if err != nil {
 		return fmt.Errorf("failed to store transaction %s: %w", txid, err)
 	}
@@ -419,4 +433,82 @@ func StoreTransactionInput(postgresTx DBTX, txid string, vin int, value int64, p
 	}
 
 	return nil
+}
+
+// CountTransactions returns the total count of transactions with optional filters
+func CountTransactions(txType string, blockHeight int64) (int64, error) {
+	var query string
+	var args []interface{}
+
+	if txType != "" && blockHeight > 0 {
+		query = `SELECT COUNT(*) FROM transactions WHERE type = $1 AND block_height = $2`
+		args = []interface{}{txType, blockHeight}
+	} else if txType != "" {
+		query = `SELECT COUNT(*) FROM transactions WHERE type = $1`
+		args = []interface{}{txType}
+	} else if blockHeight > 0 {
+		query = `SELECT COUNT(*) FROM transactions WHERE block_height = $1`
+		args = []interface{}{blockHeight}
+	} else {
+		query = `SELECT COUNT(*) FROM transactions`
+		args = []interface{}{}
+	}
+
+	var count int64
+	err := postgres.DB.QueryRow(context.Background(), query, args...).Scan(&count)
+	if err != nil {
+		return 0, fmt.Errorf("failed to count transactions: %w", err)
+	}
+
+	return count, nil
+}
+
+// CountTransactionOutputs returns the total count of transaction outputs with optional filters
+func CountTransactionOutputs(txid string, spent bool) (int64, error) {
+	var query string
+	var args []interface{}
+
+	if txid != "" && spent {
+		query = `SELECT COUNT(*) FROM transaction_outputs WHERE txid = $1 AND spent_by_txid IS NOT NULL`
+		args = []interface{}{txid}
+	} else if txid != "" {
+		query = `SELECT COUNT(*) FROM transaction_outputs WHERE txid = $1`
+		args = []interface{}{txid}
+	} else if spent {
+		query = `SELECT COUNT(*) FROM transaction_outputs WHERE spent_by_txid IS NOT NULL`
+		args = []interface{}{}
+	} else {
+		query = `SELECT COUNT(*) FROM transaction_outputs`
+		args = []interface{}{}
+	}
+
+	var count int64
+	err := postgres.DB.QueryRow(context.Background(), query, args...).Scan(&count)
+	if err != nil {
+		return 0, fmt.Errorf("failed to count transaction outputs: %w", err)
+	}
+
+	return count, nil
+}
+
+// CountTransactionInputs returns the total count of transaction inputs with optional filters
+func CountTransactionInputs(txid string) (int64, error) {
+	var query string
+	var args []interface{}
+
+	if txid != "" {
+		query = `SELECT COUNT(*) FROM transaction_inputs WHERE txid = $1`
+		args = []interface{}{txid}
+	} else {
+		query = `SELECT COUNT(*) FROM transaction_inputs`
+		args = []interface{}{}
+	}
+
+	var count int64
+	err := postgres.DB.QueryRow(context.Background(), query, args...).Scan(&count)
+	if err != nil {
+		return 0, fmt.Errorf("failed to count transaction inputs: %w", err)
+	}
+
+	return count, nil
 }

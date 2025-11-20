@@ -369,3 +369,38 @@ func GetRecentActiveAccounts(w http.ResponseWriter, r *http.Request) {
 
 	utils.WriteDataJson(w, accountList)
 }
+
+// CountAccounts returns the total count of accounts
+func CountAccounts(w http.ResponseWriter, r *http.Request) {
+	if !config.IsModuleEnabled("ACCOUNTS") {
+		utils.WriteErrorJson(w, http.StatusNotFound, "Accounts module is disabled")
+		return
+	}
+
+	count, err := accounts.CountAccounts()
+	if err != nil {
+		utils.WriteErrorJson(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	utils.WriteDataJson(w, map[string]int64{"count": count})
+}
+
+// CountAccountTransactions returns the total count of account transactions with optional filters
+func CountAccountTransactions(w http.ResponseWriter, r *http.Request) {
+	if !config.IsModuleEnabled("ACCOUNTS") {
+		utils.WriteErrorJson(w, http.StatusNotFound, "Accounts module is disabled")
+		return
+	}
+
+	address := utils.ParseQueryParam(r, "address", "")
+	txType := utils.ParseQueryParam(r, "type", "")
+
+	count, err := accounts.CountAccountTransactions(address, txType)
+	if err != nil {
+		utils.WriteErrorJson(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	utils.WriteDataJson(w, map[string]int64{"count": count})
+}
