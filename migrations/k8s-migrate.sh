@@ -88,6 +88,10 @@ while [[ $# -gt 0 ]]; do
             SCALE_DOWN=true
             shift
             ;;
+        --skip-scale-up)
+            SKIP_SCALE_UP=true
+            shift
+            ;;
         -y|--yes)
             SKIP_CONFIRMATION=true
             shift
@@ -100,12 +104,14 @@ while [[ $# -gt 0 ]]; do
             echo "  -f, --file FILE       Migration file (default: 001_add_count_and_balance_fields_improved.sql)"
             echo "  --no-backup           Skip database backup"
             echo "  --scale-down          Scale down zindex deployment during migration"
+            echo "  --skip-scale-up       Skip scaling back up after migration (useful for helm upgrade)"
             echo "  -y, --yes             Skip confirmation prompt"
             echo "  -h, --help            Show this help message"
             echo ""
             echo "Examples:"
             echo "  $0 -n zindex-prod"
             echo "  $0 -n zindex-prod --scale-down"
+            echo "  $0 -n zindex-prod --scale-down --skip-scale-up"
             echo "  $0 -n zindex-prod -f 001_rollback.sql --no-backup -y"
             exit 0
             ;;
@@ -135,6 +141,7 @@ echo "  Namespace: $NAMESPACE"
 echo "  Migration file: $MIGRATION_FILE"
 echo "  Backup: $([ "$CREATE_BACKUP" = true ] && echo "Yes" || echo "No")"
 echo "  Scale down: $([ "$SCALE_DOWN" = true ] && echo "Yes" || echo "No")"
+echo "  Skip scale up: $([ "$SKIP_SCALE_UP" = true ] && echo "Yes" || echo "No")"
 echo ""
 
 # Confirmation prompt
@@ -230,16 +237,20 @@ print_info "Stopping port-forward..."
 pkill -f "kubectl port-forward.*postgres" || true
 echo ""
 
-if [ "$SCALED_DOWN" = true ]; then
+if [ "$SCALED_DOWN" = true ] && [ "$SKIP_SCALE_UP" != true ]; then
     print_info "Scaling zindex back up..."
     kubectl scale deployment zindex --replicas=1 -n "$NAMESPACE"
 
     print_info "Waiting for pod to be ready..."
     kubectl wait --for=condition=ready pod -l app=zindex -n "$NAMESPACE" --timeout=120s
 
-    SKIP_SCALE_UP=true  # Prevent cleanup from scaling up again
-
     print_success "Zindex deployment is ready"
+    echo ""
+elif [ "$SCALED_DOWN" = true ] && [ "$SKIP_SCALE_UP" = true ]; then
+    print_warning "Skipping scale-up as requested"
+    print_info "Zindex deployment remains at 0 replicas"
+    print_info "Run 'helm upgrade' to deploy new version, or manually scale up:"
+    print_info "  kubectl scale deployment zindex --replicas=1 -n $NAMESPACE"
     echo ""
 fi
 
@@ -270,8 +281,16 @@ if [ "$CREATE_BACKUP" = true ]; then
 fi
 
 print_info "Next steps:"
-echo "  1. Test the API endpoints (see test commands in curl-test-commands.txt)"
-echo "  2. Monitor logs: kubectl logs -f -l app=zindex -n $NAMESPACE"
-echo "  3. Keep the backup for 24-48 hours"
+if [ "$SKIP_SCALE_UP" = true ]; then
+    echo "  1. Run: helm upgrade zindex ./deploy/zindex-infra -n $NAMESPACE"
+    echo "  2. Monitor deployment: kubectl rollout status deployment/zindex -n $NAMESPACE"
+    echo "  3. Test the API endpoints (see test commands in curl-test-commands.txt)"
+    echo "  4. Monitor logs: kubectl logs -f -l app=zindex -n $NAMESPACE"
+    echo "  5. Keep the backup for 24-48 hours"
+else
+    echo "  1. Test the API endpoints (see test commands in curl-test-commands.txt)"
+    echo "  2. Monitor logs: kubectl logs -f -l app=zindex -n $NAMESPACE"
+    echo "  3. Keep the backup for 24-48 hours"
+fi
 echo ""
 print_success "Done! 🚀"

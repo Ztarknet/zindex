@@ -2,6 +2,22 @@
 
 ## TL;DR - Recommended Steps for Kubernetes
 
+**Option 1: Automated with k8s-migrate.sh (Recommended)**
+
+```bash
+# Run migration and stay scaled down, then helm upgrade
+cd migrations
+./k8s-migrate.sh -n <namespace> --scale-down --skip-scale-up
+
+# Deploy new zindex version
+helm upgrade zindex ./deploy/zindex-infra -n <namespace>
+
+# Verify
+kubectl logs -f -l app=zindex -n <namespace>
+```
+
+**Option 2: Manual steps**
+
 ```bash
 # 1. Scale down zindex deployment
 kubectl scale deployment zindex --replicas=0 -n <namespace>
@@ -21,12 +37,11 @@ export ZINDEX_DB_HOST="localhost"
 # 5. Stop port-forward
 pkill -f "kubectl port-forward.*postgres"
 
-# 6. Scale up zindex deployment
-kubectl scale deployment zindex --replicas=1 -n <namespace>
+# 6. Deploy new zindex version (scales up automatically)
+helm upgrade zindex ./deploy/zindex-infra -n <namespace>
 
 # 7. Verify
-kubectl port-forward svc/zindex 8080:8080 -n <namespace> &
-curl "http://localhost:8080/api/v1/tx-graph/transactions/count" | jq
+kubectl logs -f -l app=zindex -n <namespace>
 ```
 
 ---
@@ -79,6 +94,23 @@ pkill -f "kubectl port-forward.*postgres"
 - Scale down deployment during migration
 - Definitely create backup
 
+**Option A: Using k8s-migrate.sh (Recommended)**
+```bash
+export NAMESPACE="your-namespace"
+
+# Run migration with scale-down, skip scale-up
+cd migrations
+./k8s-migrate.sh -n $NAMESPACE --scale-down --skip-scale-up
+
+# Deploy new zindex version
+cd ..
+helm upgrade zindex ./deploy/zindex-infra -n $NAMESPACE
+
+# Wait for rollout
+kubectl rollout status deployment/zindex -n $NAMESPACE
+```
+
+**Option B: Manual steps**
 ```bash
 export NAMESPACE="your-namespace"
 
@@ -100,8 +132,9 @@ cd migrations
 # Stop port-forward
 pkill -f "kubectl port-forward.*postgres"
 
-# Scale up zindex
-kubectl scale deployment zindex --replicas=1 -n $NAMESPACE
+# Deploy new version (scales up automatically)
+cd ..
+helm upgrade zindex ./deploy/zindex-infra -n $NAMESPACE
 
 # Wait for pod to be ready
 kubectl wait --for=condition=ready pod -l app=zindex -n $NAMESPACE --timeout=120s
