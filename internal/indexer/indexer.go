@@ -1,6 +1,7 @@
 package indexer
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -23,6 +24,11 @@ type RpcClient interface {
 	GetBlock(hash string) (map[string]interface{}, error)
 	GetBlockCount() (int64, error)
 }
+
+const (
+	// maxIndexRetries is the maximum number of times to retry indexing a block after rollback
+	maxIndexRetries = 3
+)
 
 var (
 	stopChan     chan struct{}
@@ -175,6 +181,7 @@ func Stop() {
 func startIndexingLoop(startBlock int64, rpcClient RpcClient) {
 	currentBlock := startBlock
 	pollInterval := time.Duration(config.Conf.Indexer.PollInterval) * time.Second
+	retryCount := 0 // Track retries for the current block
 
 	log.Printf("Starting indexing loop from block %d", currentBlock)
 
@@ -217,17 +224,46 @@ func startIndexingLoop(startBlock int64, rpcClient RpcClient) {
 						if reorgErr := reorg.GetReorgError(err); reorgErr != nil {
 							log.Printf("Reorg handled: %s", reorgErr.Error())
 							currentBlock = reorgErr.NewStartHeight
-							break // Exit the inner loop to restart from new height
+							retryCount = 0 // Reset retry count after reorg
+							break          // Exit the inner loop to restart from new height
 						}
-						// Non-reorg error - this is a real failure
+
+						// Non-reorg error - attempt rollback and retry
 						log.Printf("Error indexing block %d: %v", height, err)
-						errorChannel <- err
-						return
+						retryCount++
+
+						if retryCount > maxIndexRetries {
+							log.Printf("Max retries (%d) exceeded for block %d, stopping indexer", maxIndexRetries, height)
+							errorChannel <- fmt.Errorf("max retries exceeded for block %d: %w", height, err)
+							return
+						}
+
+						// Rollback to previous block and retry
+						rollbackHeight := height - 1
+						if rollbackHeight < 0 {
+							rollbackHeight = 0
+						}
+
+						log.Printf("Rolling back to block %d and retrying (attempt %d/%d)", rollbackHeight, retryCount, maxIndexRetries)
+
+						ctx := context.Background()
+						if rollbackErr := postgres.RollbackToHeight(ctx, rollbackHeight); rollbackErr != nil {
+							log.Printf("Failed to rollback to height %d: %v", rollbackHeight, rollbackErr)
+							errorChannel <- fmt.Errorf("failed to rollback after indexing error: %w", rollbackErr)
+							return
+						}
+
+						// Set current block to retry from the rollback height + 1
+						currentBlock = rollbackHeight + 1
+						break // Exit inner loop to restart from the rollback point
 					}
+
+					// Success - reset retry count
+					retryCount = 0
 				}
 			}
 
-			// Only advance to next batch if we completed the current one without reorg
+			// Only advance to next batch if we completed the current one without reorg or error
 			if currentBlock <= batchEnd {
 				currentBlock = batchEnd + 1
 			}

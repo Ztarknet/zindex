@@ -7,7 +7,7 @@ DOCKER_IMAGE=zindex:latest
 DOCKER_IMAGE_PROD=brandonjroberts/zindex
 DOCKER_CONTAINER=zindex-container
 CONFIG_PATH=configs/config.yaml
-APP_VERSION?=v0.1.0
+APP_VERSION?=v0.3.0
 COMMIT_SHA?=$(shell git rev-parse --short HEAD)
 POSTGRES_PASSWORD?=changeme
 
