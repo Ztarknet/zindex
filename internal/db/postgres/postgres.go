@@ -183,10 +183,196 @@ func GetLastIndexedBlock() (int64, error) {
 	return lastBlock, nil
 }
 
-// TODO: Add reorg handling functions when needed:
-// - GetLastIndexedHash() - Get last indexed block hash
-// - GetBlockAtHeight(height) - Get stored block hash at specific height
-// - RollbackToBlock(height) - Remove blocks after specified height
+// GetLastIndexedHash returns the hash of the last indexed block
+func GetLastIndexedHash() (string, error) {
+	var hash string
+	err := DB.QueryRow(context.Background(), "SELECT last_indexed_hash FROM indexer_state WHERE id = 1").Scan(&hash)
+	if err != nil {
+		return "", fmt.Errorf("failed to get last indexed hash: %w", err)
+	}
+	return hash, nil
+}
+
+// GetBlockHashAtHeight returns the stored hash at a specific height
+func GetBlockHashAtHeight(height int64) (string, error) {
+	var hash string
+	err := DB.QueryRow(context.Background(), "SELECT hash FROM blocks WHERE height = $1", height).Scan(&hash)
+	if err != nil {
+		return "", fmt.Errorf("failed to get block hash at height %d: %w", height, err)
+	}
+	return hash, nil
+}
+
+// RollbackToHeight removes all data after the specified height
+// This handles all module tables in the correct order to maintain referential integrity
+func RollbackToHeight(ctx context.Context, rollbackHeight int64) error {
+	tx, err := DB.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to begin rollback transaction: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	log.Printf("Starting rollback to height %d", rollbackHeight)
+
+	// Step 1: Unspend transaction outputs that were spent after rollback height
+	result, err := tx.Exec(ctx, `
+		UPDATE transaction_outputs
+		SET spent_by_txid = NULL,
+		    spent_by_vin = NULL,
+		    spent_at_height = NULL
+		WHERE spent_at_height > $1
+	`, rollbackHeight)
+	if err != nil {
+		return fmt.Errorf("failed to unspend transaction outputs: %w", err)
+	}
+	log.Printf("Unspent %d transaction outputs", result.RowsAffected())
+
+	// Step 2: Unspend TZE outputs that were spent after rollback height
+	result, err = tx.Exec(ctx, `
+		UPDATE tze_outputs
+		SET spent_by_txid = NULL,
+		    spent_by_vin = NULL,
+		    spent_at_height = NULL
+		WHERE spent_at_height > $1
+	`, rollbackHeight)
+	if err != nil {
+		return fmt.Errorf("failed to unspend TZE outputs: %w", err)
+	}
+	log.Printf("Unspent %d TZE outputs", result.RowsAffected())
+
+	// Step 3: Recalculate account balances for affected accounts
+	result, err = tx.Exec(ctx, `
+		UPDATE accounts a
+		SET balance = COALESCE((
+			SELECT SUM(balance_change)
+			FROM account_transactions at
+			WHERE at.address = a.address
+			AND at.block_height <= $1
+		), 0)
+		WHERE a.address IN (
+			SELECT DISTINCT address
+			FROM account_transactions
+			WHERE block_height > $1
+		)
+	`, rollbackHeight)
+	if err != nil {
+		return fmt.Errorf("failed to recalculate account balances: %w", err)
+	}
+	log.Printf("Recalculated %d account balances", result.RowsAffected())
+
+	// Step 4: Delete account transactions after rollback height
+	result, err = tx.Exec(ctx, `
+		DELETE FROM account_transactions WHERE block_height > $1
+	`, rollbackHeight)
+	if err != nil {
+		return fmt.Errorf("failed to delete account transactions: %w", err)
+	}
+	log.Printf("Deleted %d account transactions", result.RowsAffected())
+
+	// Step 5: Delete orphaned accounts (accounts with no remaining transactions)
+	result, err = tx.Exec(ctx, `
+		DELETE FROM accounts
+		WHERE address NOT IN (
+			SELECT DISTINCT address FROM account_transactions
+		)
+	`)
+	if err != nil {
+		return fmt.Errorf("failed to delete orphaned accounts: %w", err)
+	}
+	log.Printf("Deleted %d orphaned accounts", result.RowsAffected())
+
+	// Step 6: Delete TZE inputs for transactions after rollback height
+	result, err = tx.Exec(ctx, `
+		DELETE FROM tze_inputs WHERE txid IN (
+			SELECT txid FROM transactions WHERE block_height > $1
+		)
+	`, rollbackHeight)
+	if err != nil {
+		return fmt.Errorf("failed to delete TZE inputs: %w", err)
+	}
+	log.Printf("Deleted %d TZE inputs", result.RowsAffected())
+
+	// Step 7: Delete TZE outputs for transactions after rollback height
+	result, err = tx.Exec(ctx, `
+		DELETE FROM tze_outputs WHERE txid IN (
+			SELECT txid FROM transactions WHERE block_height > $1
+		)
+	`, rollbackHeight)
+	if err != nil {
+		return fmt.Errorf("failed to delete TZE outputs: %w", err)
+	}
+	log.Printf("Deleted %d TZE outputs", result.RowsAffected())
+
+	// Step 8: Delete transactions after rollback height (CASCADE deletes inputs/outputs)
+	result, err = tx.Exec(ctx, `
+		DELETE FROM transactions WHERE block_height > $1
+	`, rollbackHeight)
+	if err != nil {
+		return fmt.Errorf("failed to delete transactions: %w", err)
+	}
+	log.Printf("Deleted %d transactions", result.RowsAffected())
+
+	// Step 9: Delete STARK proofs after rollback height
+	result, err = tx.Exec(ctx, `
+		DELETE FROM stark_proofs WHERE block_height > $1
+	`, rollbackHeight)
+	if err != nil {
+		return fmt.Errorf("failed to delete STARK proofs: %w", err)
+	}
+	log.Printf("Deleted %d STARK proofs", result.RowsAffected())
+
+	// Step 10: Delete Ztarknet facts after rollback height
+	result, err = tx.Exec(ctx, `
+		DELETE FROM ztarknet_facts WHERE block_height > $1
+	`, rollbackHeight)
+	if err != nil {
+		return fmt.Errorf("failed to delete Ztarknet facts: %w", err)
+	}
+	log.Printf("Deleted %d Ztarknet facts", result.RowsAffected())
+
+	// Step 11: Delete orphaned verifiers (verifiers with no remaining proofs/facts)
+	result, err = tx.Exec(ctx, `
+		DELETE FROM verifiers
+		WHERE verifier_id NOT IN (
+			SELECT DISTINCT verifier_id FROM stark_proofs
+			UNION
+			SELECT DISTINCT verifier_id FROM ztarknet_facts
+		)
+	`)
+	if err != nil {
+		return fmt.Errorf("failed to delete orphaned verifiers: %w", err)
+	}
+	log.Printf("Deleted %d orphaned verifiers", result.RowsAffected())
+
+	// Step 12: Delete blocks after rollback height
+	result, err = tx.Exec(ctx, `
+		DELETE FROM blocks WHERE height > $1
+	`, rollbackHeight)
+	if err != nil {
+		return fmt.Errorf("failed to delete blocks: %w", err)
+	}
+	log.Printf("Deleted %d blocks", result.RowsAffected())
+
+	// Step 13: Update indexer state to rollback height
+	_, err = tx.Exec(ctx, `
+		UPDATE indexer_state
+		SET last_indexed_block = $1,
+		    last_indexed_hash = (SELECT hash FROM blocks WHERE height = $1),
+		    updated_at = CURRENT_TIMESTAMP
+		WHERE id = 1
+	`, rollbackHeight)
+	if err != nil {
+		return fmt.Errorf("failed to update indexer state: %w", err)
+	}
+
+	// Commit the transaction
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("failed to commit rollback transaction: %w", err)
+	}
+
+	log.Printf("Successfully rolled back to height %d", rollbackHeight)
+	return nil
+}
 
 func UpdateLastIndexedBlock(height int64, hash string) error {
 	_, err := DB.Exec(

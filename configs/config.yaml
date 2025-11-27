@@ -56,8 +56,9 @@ indexer:
   poll_interval: 5
   start_block: 0
 
-  enable_reorg_handling: false
-  max_reorg_depth: 5
+  # Reorg handling - detect and handle blockchain reorganizations
+  enable_reorg_handling: true
+  max_reorg_depth: 8
 
 # Module Configuration
 modules:

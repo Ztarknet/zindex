@@ -41,3 +41,11 @@ zindex:
   rpc_url: "https://rpc.regtest.ztarknet.cash"
   production: true
   admin: false
+
+  # Indexer settings
+  indexer:
+    batch_size: 10
+    poll_interval: 5
+    start_block: 0
+    enable_reorg_handling: true
+    max_reorg_depth: 8

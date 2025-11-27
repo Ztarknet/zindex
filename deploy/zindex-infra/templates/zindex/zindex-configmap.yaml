@@ -60,12 +60,13 @@ data:
 
     # Indexer Configuration
     indexer:
-      batch_size: 10
-      poll_interval: 5
-      start_block: 0
+      batch_size: {{ .Values.zindex.indexer.batch_size }}
+      poll_interval: {{ .Values.zindex.indexer.poll_interval }}
+      start_block: {{ .Values.zindex.indexer.start_block }}
 
-      enable_reorg_handling: false
-      max_reorg_depth: 5
+      # Reorg handling - detect and handle blockchain reorganizations
+      enable_reorg_handling: {{ .Values.zindex.indexer.enable_reorg_handling }}
+      max_reorg_depth: {{ .Values.zindex.indexer.max_reorg_depth }}
 
     # Module Configuration
     modules:

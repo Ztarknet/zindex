@@ -10,6 +10,7 @@ import (
 	"github.com/keep-starknet-strange/ztarknet/zindex/internal/blocks"
 	"github.com/keep-starknet-strange/ztarknet/zindex/internal/config"
 	"github.com/keep-starknet-strange/ztarknet/zindex/internal/db/postgres"
+	"github.com/keep-starknet-strange/ztarknet/zindex/internal/reorg"
 	"github.com/keep-starknet-strange/ztarknet/zindex/internal/starks"
 	"github.com/keep-starknet-strange/ztarknet/zindex/internal/tx_graph"
 	"github.com/keep-starknet-strange/ztarknet/zindex/internal/types"
@@ -56,13 +57,12 @@ func IndexBlock(height int64, rpcClient RpcClient) error {
 		return fmt.Errorf("block height mismatch: expected %d, got %d", height, block.Height)
 	}
 
-	// TODO: Implement reorg detection and handling
-	// Config options available: config.Conf.Indexer.EnableReorgHandling, config.Conf.Indexer.MaxReorgDepth
-	// When implemented, should:
-	//   1. Compare block's previousblockhash with stored hash at height-1
-	//   2. If mismatch detected, search backward up to max_reorg_depth to find common ancestor
-	//   3. Rollback database to common ancestor
-	//   4. Continue indexing from rollback point
+	// Reorg detection and handling
+	// If enabled, compare block's previousblockhash with stored hash at height-1
+	// If mismatch detected, rollback to common ancestor and return ReorgError
+	if err := reorg.CheckAndHandleReorg(block, rpcClient); err != nil {
+		return err // This may be a ReorgError which will be handled by the indexing loop
+	}
 
 	// Index block data in each enabled module
 	// Order matters: blocks should be indexed first, then modules that depend on blocks
@@ -213,6 +213,13 @@ func startIndexingLoop(startBlock int64, rpcClient RpcClient) {
 					return
 				default:
 					if err := IndexBlock(height, rpcClient); err != nil {
+						// Check if this is a reorg error - if so, restart from the new height
+						if reorgErr := reorg.GetReorgError(err); reorgErr != nil {
+							log.Printf("Reorg handled: %s", reorgErr.Error())
+							currentBlock = reorgErr.NewStartHeight
+							break // Exit the inner loop to restart from new height
+						}
+						// Non-reorg error - this is a real failure
 						log.Printf("Error indexing block %d: %v", height, err)
 						errorChannel <- err
 						return
@@ -220,7 +227,10 @@ func startIndexingLoop(startBlock int64, rpcClient RpcClient) {
 				}
 			}
 
-			currentBlock = batchEnd + 1
+			// Only advance to next batch if we completed the current one without reorg
+			if currentBlock <= batchEnd {
+				currentBlock = batchEnd + 1
+			}
 
 			// Sleep if we're caught up
 			if currentBlock > blockCount {
