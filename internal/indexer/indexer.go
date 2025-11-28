@@ -213,6 +213,9 @@ func startIndexingLoop(startBlock int64, rpcClient RpcClient) {
 
 			log.Printf("Indexing blocks %d to %d (chain height: %d)", currentBlock, batchEnd, blockCount)
 
+			// Track if we need to restart from a different height (reorg or error)
+			batchCompleted := true
+
 			// Index batch of blocks
 			for height := currentBlock; height <= batchEnd; height++ {
 				select {
@@ -224,8 +227,9 @@ func startIndexingLoop(startBlock int64, rpcClient RpcClient) {
 						if reorgErr := reorg.GetReorgError(err); reorgErr != nil {
 							log.Printf("Reorg handled: %s", reorgErr.Error())
 							currentBlock = reorgErr.NewStartHeight
-							retryCount = 0 // Reset retry count after reorg
-							break          // Exit the inner loop to restart from new height
+							retryCount = 0        // Reset retry count after reorg
+							batchCompleted = false // Don't advance past the batch
+							break                 // Exit the inner loop to restart from new height
 						}
 
 						// Non-reorg error - attempt rollback and retry
@@ -255,7 +259,8 @@ func startIndexingLoop(startBlock int64, rpcClient RpcClient) {
 
 						// Set current block to retry from the rollback height + 1
 						currentBlock = rollbackHeight + 1
-						break // Exit inner loop to restart from the rollback point
+						batchCompleted = false // Don't advance past the batch
+						break                  // Exit inner loop to restart from the rollback point
 					}
 
 					// Success - reset retry count
@@ -264,7 +269,7 @@ func startIndexingLoop(startBlock int64, rpcClient RpcClient) {
 			}
 
 			// Only advance to next batch if we completed the current one without reorg or error
-			if currentBlock <= batchEnd {
+			if batchCompleted {
 				currentBlock = batchEnd + 1
 			}
 
